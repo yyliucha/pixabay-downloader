@@ -1,0 +1,13 @@
+# 密钥
+.env
+
+# 下载的图片
+images/
+pixabay_images/
+
+# Python
+__pycache__/
+*.pyc
+
+# 测试临时目录
+*.part

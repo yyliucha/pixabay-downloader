@@ -1,0 +1,12 @@
+{
+  "keywords": ["山", "风景", "森林", "湖泊", "自然"],
+  "per_keyword": 50,
+  "image_size": "original",
+  "image_type": "photo",
+  "safe_search": true,
+  "output_dir": "F:/dsh/pixabay_images",
+  "workers": 4,
+  "api_delay_seconds": 0.2,
+  "timeout_seconds": 60,
+  "base_url": "https://pixabay.com/api/"
+}
