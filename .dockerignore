@@ -1,0 +1,18 @@
+# 密钥与本地配置
+.env
+
+# 下载的图片与日志(由宿主机目录挂载)
+images/
+pixabay_images/
+logs/
+
+# 定时任务生成的启动脚本
+scheduled_run.bat
+
+# 测试与开发文件(不需要进镜像)
+.git
+.gitignore
+tests/
+__pycache__/
+*.pyc
+*.part

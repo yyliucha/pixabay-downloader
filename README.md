@@ -9,7 +9,8 @@
   - 全局下载历史 `download_history.json`（按 Pixabay 图片 ID 记录）：下载过的图片**永远不重复下载**，即使换关键词、换目录、文件被移动过
   - 文件存在检查：目标文件已存在则自动跳过（断点续传）
 - ✅ **再次运行自动下载后面的新图**：已下载的自动跳过，自动翻页继续下载后续的新图片，直到该关键词结果全部下完
-- ✅ **定时自动下载**（Windows）：一键注册系统定时任务，每天/每N小时/每周自动下载新图，长期运行持续积累
+- ✅ **定时自动下载**：Windows 一键注册系统定时任务；**Docker 一键部署到服务器**（每天/每N小时/每周，时区可配）
+- ✅ **环境变量全量可配**（`PIXABAY_API_KEY`、关键词、数量、尺寸、目录、日志等），Docker/服务器部署无需改代码
 - ✅ **多线程并发下载**，失败自动重试（3 次，指数退避）
 - ✅ 支持**原图 / 大图 / 中等 / 缩略图**四档尺寸
 - ✅ 每个关键词目录下生成 `metadata.csv` 元数据清单（图片 ID、来源页、标签、作者、下载地址）
@@ -21,12 +22,16 @@
 ```
 pixabay-downloader/
 ├── pixabay_downloader.py   # 主程序
-├── setup_schedule.py       # 定时任务配置工具（Windows 任务计划程序）
+├── setup_schedule.py       # Windows 定时任务配置工具（可选）
+├── Dockerfile              # Docker 镜像构建（服务器部署）
+├── docker-compose.yml      # Docker 编排（宿主机目录挂载、日志轮转）
+├── entrypoint.sh           # 容器入口（时区/cron 注册/日志重定向）
+├── .dockerignore
 ├── config.json             # 配置文件（关键词、数量、尺寸、保存路径等）
-├── .env.example            # API key 模板（复制为 .env 使用）
+├── .env.example            # 宿主配置模板（本地 + Docker 通用，复制为 .env）
 ├── run.bat                 # Windows 双击运行
-├── scheduled_run.bat       # 定时任务启动脚本（setup_schedule.py 自动生成，含本机路径）
-├── logs/                   # 定时任务运行日志（自动生成）
+├── scheduled_run.bat       # Windows 定时任务启动脚本（setup_schedule.py 自动生成）
+├── logs/                   # 运行日志（自动生成）
 └── tests/
     └── e2e_test.py         # 本地端到端测试（无需网络、无需 key）
 ```
@@ -124,6 +129,66 @@ schtasks /Query /TN PixabayDownloader         # 查看任务状态
 - 每次触发会按 `config.json` 自动下载下一批新图（每关键词 `per_keyword` 张）；下载完该关键词全部结果后会自动跳过，不影响其他关键词
 - 修改项目路径或升级 Python 后，请重新运行 `setup_schedule.py` 刷新任务
 - 若需「开机未登录也运行」：打开任务计划程序 → 找到 PixabayDownloader → 属性 → 勾选「不管用户是否登录都要运行」（需设置密码）
+
+## Docker 部署（服务器定时下载，推荐）
+
+容器内置 cron，每天固定时间自动下载新图（全局去重，永不重复），适合部署到 Linux 服务器长期运行。
+
+### 快速开始
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/yyliucha/pixabay-downloader.git
+cd pixabay-downloader
+
+# 2. 复制宿主配置文件并填写（重点是 PIXABAY_API_KEY）
+cp .env.example .env
+vi .env
+
+# 3. 启动（首次建议设 RUN_ON_START=true，启动即下载一次验证）
+docker compose up -d --build
+
+# 4. 查看日志
+docker compose logs -f
+```
+
+### 宿主配置（.env 文件，全部可选覆盖）
+
+| 变量 | 说明 | 默认值 |
+|---|---|---|
+| `PIXABAY_API_KEY` | **必填**，Pixabay API key | 无 |
+| `PIXABAY_KEYWORDS` | 搜索关键词，逗号分隔 | `山,风景,森林,湖泊,自然` |
+| `PIXABAY_COUNT` | 每个关键词下载的新图数量 | `50` |
+| `PIXABAY_SIZE` | `original`/`large`/`webformat`/`preview` | `original` |
+| `PIXABAY_IMAGE_TYPE` | `photo`/`illustration`/`vector`/`all` | `photo` |
+| `PIXABAY_SAFE_SEARCH` | `true`/`false` | `true` |
+| `PIXABAY_WORKERS` | 并发下载线程数 | `4` |
+| `PIXABAY_DELAY` | API 请求间隔秒（429 限流时调大） | `0.2` |
+| `PIXABAY_TIMEOUT` | 单图下载超时秒 | `60` |
+| `TZ` | 容器时区（**定时触发时间按此时区**） | `Asia/Shanghai` |
+| `CRON_EXPRESSION` | cron 表达式：分 时 日 月 周 | `0 2 * * *`（每天 02:00） |
+| `RUN_ON_START` | 启动时立即下载一次（`true`/`false`） | `false` |
+| `PIXABAY_HOST_IMAGES_DIR` | **宿主机图片保存目录** | `./pixabay_images` |
+| `PIXABAY_HOST_LOG_DIR` | **宿主机日志保存目录** | `./logs` |
+
+> 配置优先级：命令行参数 > 环境变量 > `config.json` > 默认值。如需更多控制，可把 `config.json` 挂载进容器（docker-compose.yml 已预置 `./config.json:/app/config.json:ro`）。
+
+### 日志与数据
+
+- **完整日志双通道**：容器内 `/data/logs/pixabay_download.log`（挂载到宿主机 `./logs/`，含每次运行的时间戳、搜索/下载/去重/失败明细）+ `docker compose logs`（stdout 同步输出，含 cron 触发记录）
+- 图片保存：宿主机 `./pixabay_images/关键词/`（按关键词分子目录 + `metadata.csv` + 全局去重记录 `download_history.json`）
+- 修改配置：编辑 `.env` 后 `docker compose up -d` 生效（无需重建镜像）
+- 更新代码：`git pull` 后 `docker compose up -d --build`
+- 删除服务：`docker compose down`（宿主机图片/日志保留）
+
+### 常用管理命令
+
+```bash
+docker compose logs -f                 # 实时查看日志
+docker compose exec pixabay-downloader cat /etc/crontabs/root   # 查看容器内定时任务
+docker compose exec pixabay-downloader python pixabay_downloader.py --dry-run  # 试运行(只搜索不下载)
+docker compose restart                  # 重启
+```
 
 ## 输出说明
 

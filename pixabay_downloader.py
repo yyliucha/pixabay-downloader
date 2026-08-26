@@ -113,6 +113,38 @@ def load_config():
     return cfg
 
 
+# 环境变量 → 配置项映射(Docker 部署用)
+# 优先级: 命令行参数 > 环境变量 > config.json > 默认值
+ENV_CONFIG_MAP = {
+    "PIXABAY_KEYWORDS": ("keywords", lambda v: [k.strip() for k in re.split(r"[,，]", v) if k.strip()]),
+    "PIXABAY_COUNT": ("per_keyword", lambda v: max(1, int(v))),
+    "PIXABAY_SIZE": ("image_size", str),
+    "PIXABAY_IMAGE_TYPE": ("image_type", str),
+    "PIXABAY_SAFE_SEARCH": ("safe_search", lambda v: v.strip().lower() in ("1", "true", "yes", "on")),
+    "PIXABAY_OUTPUT_DIR": ("output_dir", str),
+    "PIXABAY_WORKERS": ("workers", lambda v: max(1, int(v))),
+    "PIXABAY_DELAY": ("api_delay_seconds", float),
+    "PIXABAY_TIMEOUT": ("timeout_seconds", float),
+    "PIXABAY_BASE_URL": ("base_url", str),
+}
+
+
+def apply_env_overrides(cfg):
+    """用环境变量覆盖配置(供 Docker / 服务器部署使用)。"""
+    for env_name, (key, conv) in ENV_CONFIG_MAP.items():
+        raw = os.environ.get(env_name)
+        if raw is None or raw.strip() == "":
+            continue
+        try:
+            cfg[key] = conv(raw.strip())
+        except ValueError:
+            print(f"! 警告: 环境变量 {env_name}={raw} 无法解析, 已忽略", file=sys.stderr)
+    if cfg["image_size"] not in SIZE_FIELDS:
+        print(f"! 警告: image_size={cfg['image_size']} 无效, 已回退为 original", file=sys.stderr)
+        cfg["image_size"] = "original"
+    return cfg
+
+
 def load_dotenv(path):
     d = {}
     if os.path.exists(path):
@@ -445,6 +477,7 @@ def main(argv=None):
 
     args = parse_args(argv)
     cfg = load_config()
+    apply_env_overrides(cfg)
 
     if args.keywords is not None:
         cfg["keywords"] = [k.strip() for k in re.split(r"[,，]", args.keywords) if k.strip()]
@@ -462,8 +495,8 @@ def main(argv=None):
         cfg["base_url"] = args.base_url
     cfg["base_url"] = cfg["base_url"].rstrip("/") + "/"
 
-    if args.log:
-        log_path = Path(args.log)
+    if args.log or os.environ.get("PIXABAY_LOG"):
+        log_path = Path(args.log or os.environ["PIXABAY_LOG"])
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_file = open(log_path, "a", encoding="utf-8")
         sys.stdout = _Tee(sys.stdout, log_file)

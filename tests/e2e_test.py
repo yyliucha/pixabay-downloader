@@ -112,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
 _LOG_COUNTER = {"n": 0}
 
 
-def run_cli(extra_args, out_dir, logs_dir):
+def run_cli(extra_args, out_dir, logs_dir, env=None):
     """运行下载器 CLI, 输出重定向到日志文件后读回 (兼容无管道环境)。"""
     _LOG_COUNTER["n"] += 1
     log_stdout = os.path.join(logs_dir, f"stdout_{_LOG_COUNTER['n']}.log")
@@ -124,8 +124,11 @@ def run_cli(extra_args, out_dir, logs_dir):
         "--output", out_dir,
         *extra_args,
     ]
+    cmd_env = dict(os.environ)
+    if env:
+        cmd_env.update(env)
     with open(log_stdout, "wb") as fo, open(log_stderr, "wb") as fe:
-        proc = subprocess.run(cmd, stdout=fo, stderr=fe)
+        proc = subprocess.run(cmd, stdout=fo, stderr=fe, env=cmd_env)
     return {
         "returncode": proc.returncode,
         "stdout": open(log_stdout, "rb").read().decode("utf-8", "replace"),
@@ -195,6 +198,19 @@ def main():
             assert r4["returncode"] == 0
             assert "(dry-run)" in r4["stdout"]
             assert not os.path.exists(out2), "dry-run 不应创建目录"
+
+            # ---- 场景 5: 环境变量配置(等价于 Docker 部署方式)
+            out_env = os.path.join(tmp, "env_images")
+            r5 = run_cli([], out_env, tmp, env={
+                "PIXABAY_KEYWORDS": "山",
+                "PIXABAY_COUNT": "2",
+                "PIXABAY_SIZE": "original",
+            })
+            assert r5["returncode"] == 0, r5["stderr"]
+            assert "新增 2 张" in r5["stdout"], f"环境变量配置应下载2张: {r5['stdout']}"
+            assert sorted(os.listdir(os.path.join(out_env, "山"))) == \
+                ["1001.jpg", "1002.png", "metadata.csv"], \
+                f"环境变量配置下载文件不符: {sorted(os.listdir(os.path.join(out_env, '山')))}"
 
             print("\nALL TESTS PASSED ✔")
     finally:
