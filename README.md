@@ -9,7 +9,7 @@
   - 全局下载历史 `download_history.json`（按 Pixabay 图片 ID 记录）：下载过的图片**永远不重复下载**，即使换关键词、换目录、文件被移动过
   - 文件存在检查：目标文件已存在则自动跳过（断点续传）
 - ✅ **再次运行自动下载后面的新图**：已下载的自动跳过，自动翻页继续下载后续的新图片，直到该关键词结果全部下完
-- ✅ **定时自动下载**：Windows 一键注册系统定时任务；**Docker 一键部署到服务器**（每天/每N小时/每周，时区可配）
+- ✅ **定时自动下载（cron 表达式，跨平台）**：Linux/macOS 系统 cron、Windows 任务计划程序回退、Docker 容器内置 cron，三端统一 `0 2 * * *` 格式
 - ✅ **环境变量全量可配**（`PIXABAY_API_KEY`、关键词、数量、尺寸、目录、日志等），Docker/服务器部署无需改代码
 - ✅ **多线程并发下载**，失败自动重试（3 次，指数退避）
 - ✅ 支持**原图 / 大图 / 中等 / 缩略图**四档尺寸
@@ -21,8 +21,8 @@
 
 ```
 pixabay-downloader/
-├── pixabay_downloader.py   # 主程序
-├── setup_schedule.py       # Windows 定时任务配置工具（可选）
+├── pixabay_downloader.py   # 主程序（纯 Python，跨平台）
+├── setup_schedule.py       # 跨平台定时任务配置工具（cron 表达式）
 ├── Dockerfile              # Docker 镜像构建（服务器部署）
 ├── docker-compose.yml      # Docker 编排（宿主机目录挂载、日志轮转）
 ├── entrypoint.sh           # 容器入口（时区/cron 注册/日志重定向）
@@ -101,34 +101,43 @@ python pixabay_downloader.py --quiet
 
 示例：第一次 `--count 50` 下载了前 50 张 → 再次运行 `--count 50` 就会继续下载第 51~100 张 → 每多跑一次就往后多下 50 张，永不重复。
 
-## 定时自动下载（Windows）
+## 定时自动下载（cron 表达式，跨平台）
+
+统一使用 **cron 表达式（分 时 日 月 周）** 调度，三个平台一致：
+
+| 平台 | 调度方式 |
+|---|---|
+| Linux / macOS | 系统 cron（`crontab` 命令，用户级，无需 root） |
+| Windows | 无原生 cron，自动回退到任务计划程序（schtasks） |
+| Docker | 容器内置 cron（`CRON_EXPRESSION` 环境变量） |
 
 结合「再次运行自动下载新图」机制，定时任务每次触发都会自动下载一批新图，**长期运行 = 图片持续自动积累，永不重复**。
 
 ### 注册定时任务
 
 ```bash
-python setup_schedule.py --daily 02:00        # 每天 02:00 自动下载
-python setup_schedule.py --hourly 6           # 每 6 小时下载一次
-python setup_schedule.py --weekly "10:00 SUN" # 每周日 10:00
-python setup_schedule.py                      # 交互式引导（推荐新手）
+python setup_schedule.py --daily 02:00          # 每天 02:00 自动下载
+python setup_schedule.py --hourly 6             # 每 6 小时下载一次
+python setup_schedule.py --weekly "10:00 SUN"   # 每周日 10:00
+python setup_schedule.py --cron "0 */2 * * *"   # 直接使用 cron 表达式(与 Docker CRON_EXPRESSION 一致)
+python setup_schedule.py                        # 交互式引导
 ```
 
 ### 管理定时任务
 
 ```bash
-python setup_schedule.py --run-now            # 立即触发一次（测试用）
-python setup_schedule.py --remove             # 删除定时任务
-schtasks /Query /TN PixabayDownloader         # 查看任务状态
+python setup_schedule.py --list                 # 查看当前定时任务
+python setup_schedule.py --remove               # 删除定时任务
+python setup_schedule.py --dry-run              # 只打印将要执行的命令, 不实际注册
 ```
 
-### 说明
+### 平台说明
 
-- 任务通过 **Windows 任务计划程序**注册，任务名称为 `PixabayDownloader`，默认**仅当用户登录时运行**
-- 任务调用自动生成的 `scheduled_run.bat`（已固化 Python 与脚本路径），运行输出追加写入 `logs/pixabay_download.log`（`--log` 参数，控制台+文件双写）
+- **Linux / macOS**：写入用户 crontab（带 `# >>> PixabayDownloader start/end` 标记块，重复注册自动替换，不影响你已有的其它 cron 条目）；命令输出重定向到 `logs/cron_stdout.log`，下载明细写入 `logs/pixabay_download.log`；需要系统已安装 cron（主流发行版默认自带）
+- **Windows**：系统无原生 cron，自动使用任务计划程序（schtasks）回退，任务名 `PixabayDownloader`，默认仅当用户登录时运行；cron 表达式中含「月/日」限定（如 `0 2 15 * *`）时 Windows 无法表达，会提示改用 Docker 或 Linux/macOS
+- **Docker**：容器内置 busybox cron，`CRON_EXPRESSION` 环境变量即 cron 表达式（默认 `0 2 * * *`），时区由 `TZ` 控制，日志见 `/data/logs` 与 docker logs
 - 每次触发会按 `config.json` 自动下载下一批新图（每关键词 `per_keyword` 张）；下载完该关键词全部结果后会自动跳过，不影响其他关键词
 - 修改项目路径或升级 Python 后，请重新运行 `setup_schedule.py` 刷新任务
-- 若需「开机未登录也运行」：打开任务计划程序 → 找到 PixabayDownloader → 属性 → 勾选「不管用户是否登录都要运行」（需设置密码）
 
 ## Docker 部署（服务器定时下载，推荐）
 
@@ -213,18 +222,19 @@ F:/dsh/pixabay_images/
 | 部分图片下载失败 | 程序会自动重试 3 次；重跑一次即可，已成功的会自动跳过 |
 | 想继续下载同一关键词后面的图片 | 直接再运行一次即可，程序会自动跳过已下载的、继续下载后续新图，直到全部下完 |
 | 想重新下载已下载过的图 | 删除保存目录下的 `download_history.json`（或整个关键词子目录）后重跑 |
-| 定时任务没到点不运行 | 默认「仅当用户登录时运行」；电脑关机/睡眠/未登录时任务不会执行，开机后会错过（如需开机即补跑，可在任务计划程序中勾选「如果错过了计划开始时间, 立即启动任务」） |
+| 定时任务没到点不运行 | 电脑关机/睡眠时任务不会执行。Windows 可勾选「如果错过了计划开始时间, 立即启动任务」；Linux 可用 anacron 补跑 |
 | 下载的是 SVG 矢量图 | 把 `image_type` 改为 `photo`（默认即照片） |
 
 ## 本地测试（可选）
 
-无需网络、无需 API key，用本地模拟服务器验证全部功能（下载、去重、断点续传、dry-run）：
+无需网络、无需 API key，用本地模拟服务器验证全部功能（下载、去重、断点续传、环境变量配置、dry-run）：
 
 ```bash
 python tests/e2e_test.py
+python tests/test_cron_expr.py   # cron 表达式与跨平台调度逻辑单元测试
 ```
 
-预期输出：`ALL TESTS PASSED ✔`
+预期输出：`ALL TESTS PASSED ✔` / `ALL CRON TESTS PASSED ✔`
 
 ## 合规说明
 
