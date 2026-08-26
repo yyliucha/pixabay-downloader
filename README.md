@@ -207,6 +207,39 @@ docker compose exec pixabay-downloader python pixabay_downloader.py --dry-run  #
 docker compose restart                  # 重启
 ```
 
+### 从 Docker Hub 拉取镜像部署（无需克隆/构建）
+
+镜像由 **GitHub Actions 自动构建并推送**到 Docker Hub（推 `main` → `latest`；打 `v*` 标签 → `vX.Y.Z` + `latest`，支持 linux/amd64 与 linux/arm64）。镜像就绪后，服务器上**无需克隆仓库、无需构建**：
+
+```bash
+# 方式一: docker run 一条命令部署(每天 02:00 自动下载)
+docker run -d --name pixabay-downloader --restart unless-stopped \
+  -e PIXABAY_API_KEY=你的PixabayKey \
+  -e TZ=Asia/Shanghai \
+  -e CRON_EXPRESSION="0 2 * * *" \
+  -e PIXABAY_KEYWORDS="山,风景,森林" \
+  -v /服务器/图片目录:/data/images \
+  -v /服务器/日志目录:/data/logs \
+  <DockerHub用户名>/pixabay-downloader:latest
+
+# 方式二: compose 方式(推荐, 配置更清晰) —— 编辑 docker-compose.yml:
+#   将 `build: .` 行删除, 并把 image 改为: <DockerHub用户名>/pixabay-downloader:latest
+#   然后: docker compose up -d   (自动拉取镜像)
+```
+
+**镜像自动构建的配置方法**（一次性，约 2 分钟）：
+
+1. 登录 [Docker Hub](https://hub.docker.com) → Account Settings → Security → **New Access Token**（权限选 **Read & Write**）
+2. GitHub 仓库 → Settings → Secrets and variables → Actions → **New repository secret**，添加两个：
+   - `DOCKERHUB_USERNAME` = 你的 Docker Hub 用户名
+   - `DOCKERHUB_TOKEN` = 上一步生成的 token
+3. 完成后，**推一次 `main` 或打 `v*` 标签**即自动构建推送；未配置前工作流会自动跳过，不影响其它功能
+
+### 从镜像更新的注意事项
+
+- 镜像默认配置与源码一致：所有 `PIXABAY_*` 环境变量、`TZ`、`CRON_EXPRESSION`、`RUN_ON_START` 均可用
+- 镜像内不含 `config.json`（用环境变量配置即可）；如需挂载自定义配置，用 `-v /路径/config.json:/app/config.json:ro`
+
 ## 输出说明
 
 ```
