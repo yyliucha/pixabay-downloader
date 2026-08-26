@@ -5,6 +5,10 @@
 images/
 pixabay_images/
 
+# 定时任务生成的启动脚本(含本机 Python 路径)与日志
+scheduled_run.bat
+logs/
+
 # Python
 __pycache__/
 *.pyc
