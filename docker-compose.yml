@@ -1,0 +1,36 @@
+services:
+  pixabay-downloader:
+    build: .
+    image: pixabay-downloader:latest
+    container_name: pixabay-downloader
+    restart: unless-stopped
+
+    # 宿主配置文件: 复制 .env.example 为 .env, 填入 PIXABAY_API_KEY 等
+    env_file:
+      - .env
+    environment:
+      TZ: "${TZ:-Asia/Shanghai}"
+      CRON_EXPRESSION: "${CRON_EXPRESSION:-0 2 * * *}"
+      RUN_ON_START: "${RUN_ON_START:-false}"
+      PIXABAY_KEYWORDS: "${PIXABAY_KEYWORDS:-山,风景,森林,湖泊,自然}"
+      PIXABAY_COUNT: "${PIXABAY_COUNT:-50}"
+      PIXABAY_SIZE: "${PIXABAY_SIZE:-original}"
+      PIXABAY_IMAGE_TYPE: "${PIXABAY_IMAGE_TYPE:-photo}"
+      PIXABAY_SAFE_SEARCH: "${PIXABAY_SAFE_SEARCH:-true}"
+      PIXABAY_WORKERS: "${PIXABAY_WORKERS:-4}"
+      PIXABAY_DELAY: "${PIXABAY_DELAY:-0.2}"
+      PIXABAY_TIMEOUT: "${PIXABAY_TIMEOUT:-60}"
+
+    volumes:
+      # 宿主机图片保存目录(通过 .env 的 PIXABAY_HOST_IMAGES_DIR 配置)
+      - "${PIXABAY_HOST_IMAGES_DIR:-./pixabay_images}:/data/images"
+      # 宿主机日志目录(通过 .env 的 PIXABAY_HOST_LOG_DIR 配置)
+      - "${PIXABAY_HOST_LOG_DIR:-./logs}:/data/logs"
+      # 可选: 挂载宿主配置文件 config.json 覆盖默认下载配置
+      - ./config.json:/app/config.json:ro
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
