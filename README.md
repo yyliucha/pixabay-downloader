@@ -1,6 +1,13 @@
-# Pixabay 图片下载器
+# Pixabay 图片下载器 · Pixabay Image Downloader
+
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg?logo=docker)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub last commit](https://img.shields.io/github/last-commit/yyliucha/pixabay-downloader)](https://github.com/yyliucha/pixabay-downloader)
 
 通过 **Pixabay 官方 API** 按关键词批量下载图片到本地。合规、稳定、无需模拟浏览器。
+
+> **English**: Batch download images from [Pixabay](https://pixabay.com/) via the official API — keyword search, global dedupe (never re-download the same image), cron-based scheduled downloads, cross-platform, and one-command Docker deployment. Pure Python standard library, no third-party dependencies.
 
 ## 特性
 
@@ -29,6 +36,7 @@ pixabay-downloader/
 ├── .dockerignore
 ├── config.json             # 配置文件（关键词、数量、尺寸、保存路径等）
 ├── .env.example            # 宿主配置模板（本地 + Docker 通用，复制为 .env）
+├── LICENSE                 # MIT License
 ├── run.bat                 # Windows 双击运行
 ├── scheduled_run.bat       # Windows 定时任务启动脚本（setup_schedule.py 自动生成）
 ├── logs/                   # 运行日志（自动生成）
@@ -238,6 +246,6 @@ python tests/test_cron_expr.py   # cron 表达式与跨平台调度逻辑单元�
 
 ## 合规说明
 
+- 本项目代码以 **MIT License** 开源（见 `LICENSE`）；下载的图片遵循 [Pixabay Content License](https://pixabay.com/service/license-summary/)，可免费用于商业与非商业用途。
 - 本项目使用 Pixabay 官方 API，请遵守 [Pixabay API 文档](https://pixabay.com/api/docs/) 与 [服务条款](https://pixabay.com/service/terms/)。
-- Pixabay 图片遵循 [Pixabay Content License](https://pixabay.com/service/license-summary/)，可免费用于商业与非商业用途。
 - 通过 API 获取图片时，建议保留作者与来源信息（`metadata.csv` 已自动记录），并控制合理请求频率。
