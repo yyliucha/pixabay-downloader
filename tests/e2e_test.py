@@ -141,14 +141,19 @@ def main():
         with tempfile.TemporaryDirectory(prefix="pixabay_test_") as tmp:
             out = os.path.join(tmp, "images")
 
-            # ---- 场景 1: 首次下载 4 张
-            r = run_cli(["--keywords", "山", "--count", "4", "--workers", "3"], out, tmp)
+            # ---- 场景 1: 首次下载 4 张 (同时验证 --log 日志写入)
+            log_file = os.path.join(tmp, "run.log")
+            r = run_cli(["--keywords", "山", "--count", "4", "--workers", "3",
+                         "--log", log_file], out, tmp)
             print(r["stdout"])
             if r["returncode"] != 0:
                 print("STDERR:", r["stderr"])
                 raise SystemExit("场景1失败: 首次下载返回码非0")
             assert "新增 4 张" in r["stdout"], "首次应新增 4 张"
             assert "失败 0 张" in r["stdout"], "不应有失败"
+            log_text = open(log_file, encoding="utf-8").read()
+            assert "开始运行" in log_text, f"日志缺少开始标记: {log_text}"
+            assert "新增 4 张" in log_text, f"日志缺少完成统计: {log_text}"
 
             mountain_dir = os.path.join(out, "山")
             assert sorted(os.listdir(mountain_dir)) == \

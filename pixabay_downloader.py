@@ -27,6 +27,7 @@ Pixabay 图片下载器
 import argparse
 import concurrent.futures
 import csv
+import datetime
 import json
 import os
 import re
@@ -79,6 +80,23 @@ HTTP_HINTS = {
 
 class ApiError(Exception):
     """API 调用失败。"""
+
+
+class _Tee:
+    """同时写入终端和日志文件(供 --log 使用)。"""
+
+    def __init__(self, stream, file):
+        self.stream = stream
+        self.file = file
+
+    def write(self, data):
+        self.stream.write(data)
+        self.file.write(data)
+        return len(data)
+
+    def flush(self):
+        self.stream.flush()
+        self.file.flush()
 
 
 # ---------------------------------------------------------------- 配置与密钥
@@ -413,6 +431,8 @@ def parse_args(argv):
                    help="图片类型: photo=照片(默认) | illustration=插画 | vector=矢量图 | all=全部")
     p.add_argument("--dry-run", action="store_true", help="只搜索并打印图片地址, 不下载")
     p.add_argument("--quiet", action="store_true", help="不打印每张图片的进度行")
+    p.add_argument("--log", metavar="FILE",
+                   help="把运行输出同时追加写入日志文件(定时任务建议使用)")
     return p.parse_args(argv)
 
 
@@ -441,6 +461,15 @@ def main(argv=None):
     if args.base_url:
         cfg["base_url"] = args.base_url
     cfg["base_url"] = cfg["base_url"].rstrip("/") + "/"
+
+    if args.log:
+        log_path = Path(args.log)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = open(log_path, "a", encoding="utf-8")
+        sys.stdout = _Tee(sys.stdout, log_file)
+        sys.stderr = _Tee(sys.stderr, log_file)
+        print(f"========== 开始运行: {datetime.datetime.now():%Y-%m-%d %H:%M:%S} "
+              f"(关键词: {cfg['keywords']}, 每关键词 {cfg['per_keyword']} 张) ==========")
 
     key = resolve_api_key(args.key)
     if not key:
