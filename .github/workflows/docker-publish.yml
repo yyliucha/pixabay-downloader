@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # GitHub 限制: secrets 不能直接在 if 条件中使用, 先绑定到 env 再判断
+    env:
+      DH_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -25,24 +29,24 @@ jobs:
       # 配置后(仓库 Settings → Secrets and variables → Actions)即刻生效。
       # 触发规则: 推 main → latest; 打 v* 标签 → vX.Y.Z + latest
       - name: Login to Docker Hub
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.DH_USERNAME != '' && env.DH_TOKEN != '' }}
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ env.DH_USERNAME }}
+          password: ${{ env.DH_TOKEN }}
 
       - name: Extract metadata
         id: meta
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.DH_USERNAME != '' && env.DH_TOKEN != '' }}
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/pixabay-downloader
+          images: ${{ env.DH_USERNAME }}/pixabay-downloader
           tags: |
             type=ref,event=tag
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push to Docker Hub
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.DH_USERNAME != '' && env.DH_TOKEN != '' }}
         uses: docker/build-push-action@v6
         with:
           context: .
