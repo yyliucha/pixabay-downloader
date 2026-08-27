@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # GitHub 限制: secrets 不能直接在 if 条件中使用, 先绑定到 env 再判断
+    # GitHub limitation: secrets cannot be used directly in `if` conditions;
+    # bind them to env first, then check env
     env:
       DH_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -25,9 +26,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 未配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN Secrets 时自动跳过,
-      # 配置后(仓库 Settings → Secrets and variables → Actions)即刻生效。
-      # 触发规则: 推 main → latest; 打 v* 标签 → vX.Y.Z + latest
+      # Skipped automatically while DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets
+      # are not configured (repo Settings -> Secrets and variables -> Actions).
+      # Trigger rules: push main -> latest; push v* tag -> vX.Y.Z + latest
       - name: Login to Docker Hub
         if: ${{ env.DH_USERNAME != '' && env.DH_TOKEN != '' }}
         uses: docker/login-action@v3
