@@ -5,10 +5,29 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg?logo=docker)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/yyliucha/pixabay-downloader)](https://github.com/yyliucha/pixabay-downloader/releases)
 [![Docker Pulls](https://img.shields.io/docker/pulls/s1065420329/pixabay-downloader)](https://hub.docker.com/r/s1065420329/pixabay-downloader)
+[![Docker build](https://img.shields.io/github/actions/workflow/status/yyliucha/pixabay-downloader/docker-publish.yml?label=Docker%20build)](https://github.com/yyliucha/pixabay-downloader/actions)
+[![GitHub stars](https://img.shields.io/github/stars/yyliucha/pixabay-downloader)](https://github.com/yyliucha/pixabay-downloader/stargazers)
 [![GitHub last commit](https://img.shields.io/github/last-commit/yyliucha/pixabay-downloader)](https://github.com/yyliucha/pixabay-downloader)
 
 通过 **Pixabay 官方 API** 按关键词批量下载图片到本地——关键词搜索、全局去重（永不重复下载）、cron 定时自动下载、跨平台、Docker 一键部署。纯 Python 标准库，无需安装任何第三方依赖。
+
+## 目录导航
+
+- [功能特性](#功能特性)
+- [工作原理](#工作原理)
+- [目录结构](#目录结构)
+- [快速开始](#快速开始)
+- [再次运行：下载后面的图片](#再次运行下载后面的图片)
+- [定时自动下载（cron 表达式，跨平台）](#定时自动下载cron-表达式跨平台)
+- [Docker 部署（服务器定时下载，推荐）](#docker-部署服务器定时下载推荐)
+- [输出说明](#输出说明)
+- [运行示例](#运行示例)
+- [常见问题](#常见问题)
+- [本地测试（可选）](#本地测试可选)
+- [相关项目](#相关项目)
+- [License 与合规说明](#license-与合规说明)
 
 ## 功能特性
 
@@ -24,6 +43,25 @@
 - ✅ 每个关键词目录下生成 `metadata.csv` 元数据清单（图片 ID、来源页、标签、作者、下载地址、状态）
 - ✅ 纯 Python 标准库（**Python 3.8+**，无需安装任何包）
 - ✅ `--dry-run` 模式：先搜索看看有哪些图，不实际下载
+
+## 工作原理
+
+```
+┌─────────────┐   搜索（官方 API，         ┌──────────────────────┐
+│   Pixabay   │ ◄── 分页、自动重试 ─────── │  pixabay_downloader.py │
+│     API     │                           └──────────┬───────────┘
+└─────────────┘                                      │ 按 Pixabay ID 全局去重
+                                                      │ (download_history.json) + 文件检查
+                                                      ▼
+                              ┌──────────────────────────────────┐
+                              │  output_dir/<关键词>/             │
+                              │    ├── 1234567.jpg  (原图)       │
+                              │    ├── 7654321.png               │
+                              │    └── metadata.csv              │
+                              └──────────────────────────────────┘
+```
+
+每次运行通过官方 API 搜索关键词，自动跳过 `download_history.json` 中已记录的图片，并持续翻页直到凑够 `per_keyword` 张**新图**（或结果耗尽）。随时重跑——它会从上次停下的地方继续。
 
 ## 目录结构
 
@@ -104,6 +142,37 @@ python pixabay_downloader.py --log run.log  # 输出同时追加写入日志文�
 - 该关键词结果全部下完后，提示 `no new images to download`
 
 示例：`--count 50` 下载前 50 张 → 再次运行 `--count 50` → 继续下载第 51~100 张 → 每多跑一次就往后多下 50 张，永不重复。
+
+## 运行示例
+
+```text
+$ python pixabay_downloader.py --keywords "mountain,landscape" --count 2
+
+Save directory: F:/dsh/pixabay_images
+Dedupe record: F:/dsh/pixabay_images/download_history.json (downloaded images are never re-downloaded)
+[mountain] Found 1284 result(s), 0 already downloaded, will download 2 new
+  ✔ 6606076.jpg
+  ✔ 5717412.jpg
+[mountain] Done: 2 new | 0 skipped | 0 failed -> F:/dsh/pixabay_images/mountain
+[landscape] Found 963 result(s), 0 already downloaded, will download 2 new
+  ✔ 4239033.jpg
+  ✔ 1006169.jpg
+[landscape] Done: 2 new | 0 skipped | 0 failed -> F:/dsh/pixabay_images/landscape
+========================================
+  mountain: 2 new | 0 skipped | 0 failed
+  landscape: 2 new | 0 skipped | 0 failed
+Total: 4 new, 0 skipped, 0 failed
+Saved to: F:/dsh/pixabay_images
+```
+
+用相同命令再跑一次，输出会变成：
+
+```text
+[mountain] Found 1284 result(s), 2 already downloaded, will download 2 new
+[mountain] Done: 2 new | 0 skipped | 0 failed
+```
+
+……并持续向后推进，直到全部下载完（提示 `no new images to download`）。
 
 ## 定时自动下载（cron 表达式，跨平台）
 
@@ -269,6 +338,10 @@ python tests/test_cron_expr.py   # cron 表达式与调度逻辑单元测试
 ```
 
 预期输出：`ALL TESTS PASSED ✔` / `ALL CRON TESTS PASSED ✔`
+
+## 相关项目
+
+- [halo-pixabay-plugin](https://github.com/yyliucha/halo-pixabay-plugin) —— 相同下载规则的 **Halo 2.x 插件**版本：直接把 Pixabay 图片下载进 Halo 附件库，支持 cron 定时触发、全局去重与控制台手动下载。
 
 ## License 与合规说明
 

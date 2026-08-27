@@ -5,10 +5,29 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg?logo=docker)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/yyliucha/pixabay-downloader)](https://github.com/yyliucha/pixabay-downloader/releases)
 [![Docker Pulls](https://img.shields.io/docker/pulls/s1065420329/pixabay-downloader)](https://hub.docker.com/r/s1065420329/pixabay-downloader)
+[![Docker build](https://img.shields.io/github/actions/workflow/status/yyliucha/pixabay-downloader/docker-publish.yml?label=Docker%20build)](https://github.com/yyliucha/pixabay-downloader/actions)
+[![GitHub stars](https://img.shields.io/github/stars/yyliucha/pixabay-downloader)](https://github.com/yyliucha/pixabay-downloader/stargazers)
 [![GitHub last commit](https://img.shields.io/github/last-commit/yyliucha/pixabay-downloader)](https://github.com/yyliucha/pixabay-downloader)
 
 Batch download images from [Pixabay](https://pixabay.com/) via the official API — keyword search, global dedupe (never re-download the same image), cron-based scheduled downloads, cross-platform, and one-command Docker deployment. Pure Python standard library, no third-party dependencies.
+
+## Table of Contents
+
+- [Features](#features)
+- [How it Works](#how-it-works)
+- [Directory Structure](#directory-structure)
+- [Quick Start](#quick-start)
+- [Re-running: Download More Images](#re-running-download-more-images)
+- [Scheduled Downloads (cron, cross-platform)](#scheduled-downloads-cron-cross-platform)
+- [Docker Deployment (Recommended for Servers)](#docker-deployment-recommended-for-servers)
+- [Output Layout](#output-layout)
+- [Example Output](#example-output)
+- [FAQ](#faq)
+- [Local Testing (Optional)](#local-testing-optional)
+- [Related Projects](#related-projects)
+- [License & Compliance](#license--compliance)
 
 ## Features
 
@@ -24,6 +43,25 @@ Batch download images from [Pixabay](https://pixabay.com/) via the official API 
 - ✅ A `metadata.csv` manifest is generated in each keyword folder (image ID, source page, tags, author, download URL, status)
 - ✅ Pure Python standard library (**Python 3.8+**, no dependencies to install)
 - ✅ `--dry-run` mode: search first and print URLs without downloading
+
+## How it Works
+
+```
+┌─────────────┐   search (official API,    ┌─────────────────┐
+│   Pixabay   │ ◄── paginated, retried ─── │  pixabay_downloader.py  │
+│     API     │                            └────────┬────────┘
+└─────────────┘                                     │ global dedupe by Pixabay ID
+                                                     │ (download_history.json) + file check
+                                                     ▼
+                              ┌──────────────────────────────────┐
+                              │  output_dir/<keyword>/           │
+                              │    ├── 1234567.jpg  (original)   │
+                              │    ├── 7654321.png               │
+                              │    └── metadata.csv              │
+                              └──────────────────────────────────┘
+```
+
+Each run searches keywords via the official API, skips every image already recorded in `download_history.json`, and keeps paging until it collects `per_keyword` **new** images (or the results are exhausted). Re-run any time — it simply continues where it left off.
 
 ## Directory Structure
 
@@ -105,6 +143,37 @@ Just **run it again** - no extra steps needed:
 - When all results for a keyword are exhausted, it reports `no new images to download`
 
 Example: `--count 50` downloads the first 50 → run again with `--count 50` → downloads images 51-100 → each run moves further down the list, never repeating.
+
+## Example Output
+
+```text
+$ python pixabay_downloader.py --keywords "mountain,landscape" --count 2
+
+Save directory: F:/dsh/pixabay_images
+Dedupe record: F:/dsh/pixabay_images/download_history.json (downloaded images are never re-downloaded)
+[mountain] Found 1284 result(s), 0 already downloaded, will download 2 new
+  ✔ 6606076.jpg
+  ✔ 5717412.jpg
+[mountain] Done: 2 new | 0 skipped | 0 failed -> F:/dsh/pixabay_images/mountain
+[landscape] Found 963 result(s), 0 already downloaded, will download 2 new
+  ✔ 4239033.jpg
+  ✔ 1006169.jpg
+[landscape] Done: 2 new | 0 skipped | 0 failed -> F:/dsh/pixabay_images/landscape
+========================================
+  mountain: 2 new | 0 skipped | 0 failed
+  landscape: 2 new | 0 skipped | 0 failed
+Total: 4 new, 0 skipped, 0 failed
+Saved to: F:/dsh/pixabay_images
+```
+
+Run it again with the same command and the output changes to:
+
+```text
+[mountain] Found 1284 result(s), 2 already downloaded, will download 2 new
+[mountain] Done: 2 new | 0 skipped | 0 failed
+```
+
+…and it keeps moving through the results until everything is downloaded (`no new images to download`).
 
 ## Scheduled Downloads (cron, cross-platform)
 
@@ -269,6 +338,10 @@ python tests/test_cron_expr.py   # unit tests for cron expressions and schedulin
 ```
 
 Expected output: `ALL TESTS PASSED ✔` / `ALL CRON TESTS PASSED ✔`
+
+## Related Projects
+
+- [halo-pixabay-plugin](https://github.com/yyliucha/halo-pixabay-plugin) - the same download rules as a **Halo 2.x plugin**: downloads Pixabay images straight into the Halo attachment library, with scheduled cron triggers, global dedupe and a console UI for manual runs.
 
 ## License & Compliance
 
