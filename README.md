@@ -5,6 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg?logo=docker)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker Pulls](https://img.shields.io/docker/pulls/s1065420329/pixabay-downloader)](https://hub.docker.com/r/s1065420329/pixabay-downloader)
 [![GitHub last commit](https://img.shields.io/github/last-commit/yyliucha/pixabay-downloader)](https://github.com/yyliucha/pixabay-downloader)
 
 Batch download images from [Pixabay](https://pixabay.com/) via the official API — keyword search, global dedupe (never re-download the same image), cron-based scheduled downloads, cross-platform, and one-command Docker deployment. Pure Python standard library, no third-party dependencies.
@@ -178,10 +179,10 @@ docker run -d --name pixabay-downloader --restart unless-stopped \
   -e PIXABAY_KEYWORDS="mountain,landscape,forest" \
   -v /server/images-dir:/data/images \
   -v /server/logs-dir:/data/logs \
-  <DockerHubUsername>/pixabay-downloader:latest
+  s1065420329/pixabay-downloader:latest
 
 # Option B: Compose (clearer config) - edit docker-compose.yml:
-#   remove the `build: .` line and set image: <DockerHubUsername>/pixabay-downloader:latest
+#   remove the `build: .` line and set image: s1065420329/pixabay-downloader:latest
 #   then: docker compose up -d   (pulls the image automatically)
 ```
 
