@@ -26,7 +26,7 @@ fi
 # ---------- 4) Register the cron job (cron expression: min hour dom month dow) ----------
 # busybox crond reads /etc/crontabs/<username>; the user comes from the file name,
 # so no user field is included in the line
-: "${CRON_EXPRESSION:=0 12 27 * *}"
+: "${CRON_EXPRESSION:=0 2 * * *}"
 CRON_LINE="$CRON_EXPRESSION /bin/sh -c 'cd /app && python /app/pixabay_downloader.py >> /proc/1/fd/1 2>&1'"
 echo "$CRON_LINE" > /etc/crontabs/root
 echo "[entrypoint] Cron job: $CRON_LINE"

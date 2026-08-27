@@ -17,7 +17,7 @@
   - `download_history.json` 按 Pixabay 图片 ID 记录所有已下载图片；下载过的图片**永远不会重复下载**，即使换关键词、换目录、文件被移动过
   - 文件存在检查：目标文件已存在则自动跳过（断点续传）
 - ✅ **再次运行自动下载后面的新图**：自动跳过已下载的，继续翻页下载后续新图，直到该关键词结果全部下完
-- ✅ **定时自动下载（cron 表达式，跨平台）**：Linux/macOS 系统 cron、Windows 任务计划程序回退、Docker 容器内置 cron，三端统一 `0 12 27 * *` 格式
+- ✅ **定时自动下载（cron 表达式，跨平台）**：Linux/macOS 系统 cron、Windows 任务计划程序回退、Docker 容器内置 cron，三端统一 `0 2 * * *` 格式
 - ✅ **环境变量全量可配**（`PIXABAY_API_KEY`、关键词、数量、尺寸、目录、日志等），Docker/服务器部署无需改代码
 - ✅ **多线程并发下载**，失败自动重试（3 次，指数退避）
 - ✅ 四档尺寸：**原图 / 大图(约1280px) / 中等(640px) / 缩略图(150px)**
@@ -139,7 +139,7 @@ python setup_schedule.py --dry-run              # 只打印命令，不实际执
 
 - **Linux / macOS**：写入用户 crontab（带 `# >>> PixabayDownloader start/end` 标记块，重复注册自动替换，不影响你已有的其它 cron 条目）；命令输出重定向到 `logs/cron_stdout.log`，下载明细写入 `logs/pixabay_download.log`；需系统已安装 cron（主流发行版默认自带）
 - **Windows**：回退到任务计划程序（任务名 `PixabayDownloader`，默认仅当用户登录时运行）；cron 表达式中含「月/日」限定（如 `0 2 15 * *`）时 Windows 无法表达，工具会提示改用 Docker 或 Linux/macOS
-- **Docker**：容器内置 busybox cron；`CRON_EXPRESSION` 即 cron 表达式（默认 `0 12 27 * *`，每月27日12:00），时区由 `TZ` 控制；日志见 `/data/logs` 与 docker logs
+- **Docker**：容器内置 busybox cron；`CRON_EXPRESSION` 即 cron 表达式（默认 `0 2 * * *`），时区由 `TZ` 控制；日志见 `/data/logs` 与 docker logs
 - 每次触发下载下一批新图（每关键词 `per_keyword` 张）；已下完的关键词自动跳过，不影响其它关键词
 - 修改项目路径或升级 Python 后，请重新运行 `setup_schedule.py` 刷新任务
 
@@ -170,11 +170,11 @@ docker compose logs -f
 镜像由 **GitHub Actions 自动构建并推送**到 Docker Hub（推 `main` → `latest`；打 `v*` 标签 → `vX.Y.Z` + `latest`；多架构：linux/amd64 + linux/arm64）。镜像发布后，服务器上无需克隆、无需构建：
 
 ```bash
-# 方式一：docker run 一条命令部署（每月 27 日 12:00 自动下载）
+# 方式一：docker run 一条命令部署（每天 02:00 自动下载）
 docker run -d --name pixabay-downloader --restart unless-stopped \
   -e PIXABAY_API_KEY=你的PixabayKey \
   -e TZ=Asia/Shanghai \
-  -e CRON_EXPRESSION="0 12 27 * *" \
+  -e CRON_EXPRESSION="0 2 * * *" \
   -e PIXABAY_KEYWORDS="mountain,landscape,forest" \
   -v /服务器/图片目录:/data/images \
   -v /服务器/日志目录:/data/logs \
@@ -209,7 +209,7 @@ docker compose up -d   # 自动拉取镜像并启动
 | `PIXABAY_DELAY` | API 请求间隔（秒） | `0.2` |
 | `PIXABAY_TIMEOUT` | 单图下载超时（秒） | `60` |
 | `TZ` | 容器时区（**定时触发时间按此时区**） | `Asia/Shanghai` |
-| `CRON_EXPRESSION` | cron 表达式：分 时 日 月 周 | `0 12 27 * *`（每月27日 12:00） |
+| `CRON_EXPRESSION` | cron 表达式：分 时 日 月 周 | `0 2 * * *` |
 | `RUN_ON_START` | 启动时立即下载一次（`true`/`false`） | `false` |
 | `PIXABAY_HOST_IMAGES_DIR` | **宿主机图片保存目录** | `./pixabay_images` |
 | `PIXABAY_HOST_LOG_DIR` | **宿主机日志保存目录** | `./logs` |
