@@ -140,7 +140,7 @@ python setup_schedule.py --dry-run              # print the commands without app
 
 - **Linux / macOS**: writes to your user crontab with a `# >>> PixabayDownloader start/end` marker block - re-registering replaces it automatically and your other crontab entries are untouched. Command output is redirected to `logs/cron_stdout.log`; download details go to `logs/pixabay_download.log`. Requires cron to be installed (present by default on mainstream distros).
 - **Windows**: falls back to Task Scheduler (task name `PixabayDownloader`, runs only when the user is logged on by default). Cron expressions with month/day restrictions (e.g. `0 2 15 * *`) cannot be expressed on Windows; the tool prints a hint to use Docker or Linux/macOS instead.
-- **Docker**: built-in busybox cron; `CRON_EXPRESSION` is the cron expression (default `0 2 * * *`), timezone controlled by `TZ`; logs go to `/data/logs` and `docker logs`.
+- **Docker**: built-in busybox cron; `CRON_EXPRESSION` is the cron expression (default `0 12 27 * *` = monthly on the 27th at 12:00), timezone controlled by `TZ`; logs go to `/data/logs` and `docker logs`.
 - Each trigger downloads the next batch of new images (`per_keyword` per keyword); exhausted keywords are skipped without affecting others.
 - After moving the project or upgrading Python, re-run `setup_schedule.py` to refresh the task.
 
@@ -171,11 +171,11 @@ docker compose logs -f
 The image is **built and pushed to Docker Hub automatically by GitHub Actions** (push `main` → `latest`; push a `v*` tag → `vX.Y.Z` + `latest`; multi-arch: linux/amd64 + linux/arm64). Once the image is published, deploy on any server without cloning or building:
 
 ```bash
-# Option A: single docker run command (downloads every day at 02:00)
+# Option A: single docker run command (downloads on the 27th of every month at 12:00)
 docker run -d --name pixabay-downloader --restart unless-stopped \
   -e PIXABAY_API_KEY=your-pixabay-key \
   -e TZ=Asia/Shanghai \
-  -e CRON_EXPRESSION="0 2 * * *" \
+  -e CRON_EXPRESSION="0 12 27 * *" \
   -e PIXABAY_KEYWORDS="mountain,landscape,forest" \
   -v /server/images-dir:/data/images \
   -v /server/logs-dir:/data/logs \
@@ -210,7 +210,7 @@ docker compose up -d   # pulls the image automatically
 | `PIXABAY_DELAY` | Delay between API requests (seconds) | `0.2` |
 | `PIXABAY_TIMEOUT` | Per-image download timeout (seconds) | `60` |
 | `TZ` | Container timezone (**scheduled triggers follow this**) | `Asia/Shanghai` |
-| `CRON_EXPRESSION` | Cron expression: min hour dom month dow | `0 2 * * *` |
+| `CRON_EXPRESSION` | Cron expression: min hour dom month dow | `0 12 27 * *` (monthly on the 27th at 12:00) |
 | `RUN_ON_START` | Run one download on container start (`true`/`false`) | `false` |
 | `PIXABAY_HOST_IMAGES_DIR` | **Host images directory** | `./pixabay_images` |
 | `PIXABAY_HOST_LOG_DIR` | **Host logs directory** | `./logs` |

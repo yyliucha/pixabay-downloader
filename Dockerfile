@@ -5,7 +5,7 @@ FROM python:3.12-alpine
 
 # Defaults (all overridable via host .env / environment variables)
 ENV TZ=Asia/Shanghai \
-    CRON_EXPRESSION="0 2 * * *" \
+    CRON_EXPRESSION="0 12 27 * *" \
     RUN_ON_START="false" \
     PIXABAY_KEYWORDS="mountain,landscape,forest,lake,nature" \
     PIXABAY_COUNT="50" \
