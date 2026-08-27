@@ -1,7 +1,7 @@
 services:
   pixabay-downloader:
     build: .
-    image: pixabay-downloader:latest
+    image: s1065420329/pixabay-downloader:latest
     container_name: pixabay-downloader
     restart: unless-stopped
 

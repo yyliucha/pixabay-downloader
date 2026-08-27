@@ -5,6 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED.svg?logo=docker)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker Pulls](https://img.shields.io/docker/pulls/s1065420329/pixabay-downloader)](https://hub.docker.com/r/s1065420329/pixabay-downloader)
 [![GitHub last commit](https://img.shields.io/github/last-commit/yyliucha/pixabay-downloader)](https://github.com/yyliucha/pixabay-downloader)
 
 通过 **Pixabay 官方 API** 按关键词批量下载图片到本地——关键词搜索、全局去重（永不重复下载）、cron 定时自动下载、跨平台、Docker 一键部署。纯 Python 标准库，无需安装任何第三方依赖。
@@ -177,10 +178,10 @@ docker run -d --name pixabay-downloader --restart unless-stopped \
   -e PIXABAY_KEYWORDS="mountain,landscape,forest" \
   -v /服务器/图片目录:/data/images \
   -v /服务器/日志目录:/data/logs \
-  <DockerHub用户名>/pixabay-downloader:latest
+  s1065420329/pixabay-downloader:latest
 
 # 方式二：compose 方式（配置更清晰）—— 编辑 docker-compose.yml：
-#   删除 `build: .` 行，把 image 改为: <DockerHub用户名>/pixabay-downloader:latest
+#   删除 `build: .` 行，把 image 改为: s1065420329/pixabay-downloader:latest
 #   然后: docker compose up -d   （自动拉取镜像）
 ```
 
