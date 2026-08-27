@@ -240,22 +240,59 @@ docker compose logs -f
 The image is **built and pushed to Docker Hub automatically by GitHub Actions** (push `main` → `latest`; push a `v*` tag → `vX.Y.Z` + `latest`; multi-arch: linux/amd64 + linux/arm64). Once the image is published, deploy on any server without cloning or building:
 
 ```bash
-# Option A: single docker run command (downloads every day at 02:00)
+# Option A: single docker run command
 docker run -d --name pixabay-downloader --restart unless-stopped \
   -e PIXABAY_API_KEY=your-pixabay-key \
   -e TZ=Asia/Shanghai \
-  -e CRON_EXPRESSION="0 2 * * *" \
+  -e CRON_EXPRESSION="0 12 27 * *" \
   -e PIXABAY_KEYWORDS="mountain,landscape,forest" \
   -v /server/images-dir:/data/images \
   -v /server/logs-dir:/data/logs \
   s1065420329/pixabay-downloader:latest
+```
 
-# Option B: Compose (clearer config) - download the pull-mode compose file:
+**Option B (recommended): docker compose** - download the pull-mode compose file, then create a `.env` next to it:
+
+```bash
 curl -O https://raw.githubusercontent.com/yyliucha/pixabay-downloader/main/docker-compose.pull.yml
 mv docker-compose.pull.yml docker-compose.yml
-# create .env (see .env.example), then:
-docker compose up -d   # pulls the image automatically
+vi .env        # fill in your values (see below)
+docker compose up -d    # pulls the image automatically
+docker compose logs -f
 ```
+
+`docker-compose.yml` (all config lives in `.env`, nothing else to edit):
+
+```yaml
+services:
+  pixabay-downloader:
+    image: s1065420329/pixabay-downloader:latest
+    container_name: pixabay-downloader
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - "${PIXABAY_HOST_IMAGES_DIR:-./pixabay_images}:/data/images"
+      - "${PIXABAY_HOST_LOG_DIR:-./logs}:/data/logs"
+```
+
+`.env` (same directory as the compose file; variables not set fall back to image defaults):
+
+```bash
+PIXABAY_API_KEY=1234567-abcdef0123456789abcdef01   # required
+PIXABAY_KEYWORDS=mountain,landscape,forest
+PIXABAY_COUNT=50
+PIXABAY_SIZE=original
+
+TZ=Asia/Shanghai
+CRON_EXPRESSION=0 12 27 * *        # e.g. monthly on the 27th at 12:00
+RUN_ON_START=false
+
+PIXABAY_HOST_IMAGES_DIR=./pixabay_images    # host images directory
+PIXABAY_HOST_LOG_DIR=./logs                 # host logs directory
+```
+
+> After editing `.env`, always re-apply with `docker compose up -d --force-recreate` - environment variables are fixed when the container is created.
 
 **One-time setup for automatic image builds** (~2 minutes):
 

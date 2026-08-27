@@ -239,22 +239,59 @@ docker compose logs -f
 镜像由 **GitHub Actions 自动构建并推送**到 Docker Hub（推 `main` → `latest`；打 `v*` 标签 → `vX.Y.Z` + `latest`；多架构：linux/amd64 + linux/arm64）。镜像发布后，服务器上无需克隆、无需构建：
 
 ```bash
-# 方式一：docker run 一条命令部署（每天 02:00 自动下载）
+# 方式一：docker run 一条命令部署
 docker run -d --name pixabay-downloader --restart unless-stopped \
   -e PIXABAY_API_KEY=你的PixabayKey \
   -e TZ=Asia/Shanghai \
-  -e CRON_EXPRESSION="0 2 * * *" \
+  -e CRON_EXPRESSION="0 12 27 * *" \
   -e PIXABAY_KEYWORDS="mountain,landscape,forest" \
   -v /服务器/图片目录:/data/images \
   -v /服务器/日志目录:/data/logs \
   s1065420329/pixabay-downloader:latest
+```
 
-# 方式二：compose 方式（配置更清晰）—— 下载拉取镜像专用的 compose 文件：
+**方式二（推荐）：docker compose** —— 下载拉取镜像专用的 compose 文件，并在同目录创建 `.env`：
+
+```bash
 curl -O https://raw.githubusercontent.com/yyliucha/pixabay-downloader/main/docker-compose.pull.yml
 mv docker-compose.pull.yml docker-compose.yml
-# 创建 .env（参照 .env.example），然后：
-docker compose up -d   # 自动拉取镜像并启动
+vi .env        # 填写你的配置（见下方示例）
+docker compose up -d    # 自动拉取镜像并启动
+docker compose logs -f
 ```
+
+`docker-compose.yml`（所有配置都在 `.env` 里，compose 文件无需修改）：
+
+```yaml
+services:
+  pixabay-downloader:
+    image: s1065420329/pixabay-downloader:latest
+    container_name: pixabay-downloader
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - "${PIXABAY_HOST_IMAGES_DIR:-./pixabay_images}:/data/images"
+      - "${PIXABAY_HOST_LOG_DIR:-./logs}:/data/logs"
+```
+
+`.env`（与 compose 文件同目录；未设置的变量使用镜像默认值）：
+
+```bash
+PIXABAY_API_KEY=1234567-abcdef0123456789abcdef01   # 必填
+PIXABAY_KEYWORDS=mountain,landscape,forest
+PIXABAY_COUNT=50
+PIXABAY_SIZE=original
+
+TZ=Asia/Shanghai
+CRON_EXPRESSION=0 12 27 * *        # 例如：每月 27 日 12:00
+RUN_ON_START=false
+
+PIXABAY_HOST_IMAGES_DIR=./pixabay_images    # 宿主机图片保存目录
+PIXABAY_HOST_LOG_DIR=./logs                 # 宿主机日志保存目录
+```
+
+> 修改 `.env` 后必须重新执行 `docker compose up -d --force-recreate` 才会生效——环境变量在容器创建时固化，运行中修改无效。
 
 **镜像自动构建的一次性配置**（约 2 分钟）：
 

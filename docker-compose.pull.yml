@@ -4,9 +4,16 @@
 #   mkdir -p ~/pixabay-downloader && cd ~/pixabay-downloader
 #   curl -O https://raw.githubusercontent.com/yyliucha/pixabay-downloader/main/docker-compose.pull.yml
 #   mv docker-compose.pull.yml docker-compose.yml
-#   cp <(echo) .env && vi .env        # fill in PIXABAY_API_KEY etc. (see .env.example)
+#   vi .env        # fill in PIXABAY_API_KEY etc. (see .env.example)
 #   docker compose up -d
 #   docker compose logs -f
+#
+# All configuration lives in the .env file next to this compose file:
+#   PIXABAY_API_KEY, PIXABAY_KEYWORDS, PIXABAY_COUNT, PIXABAY_SIZE,
+#   TZ, CRON_EXPRESSION, RUN_ON_START,
+#   PIXABAY_HOST_IMAGES_DIR (host images directory),
+#   PIXABAY_HOST_LOG_DIR (host logs directory).
+# Variables not set in .env fall back to the image defaults.
 services:
   pixabay-downloader:
     image: s1065420329/pixabay-downloader:latest
@@ -16,18 +23,6 @@ services:
     # Host config file: copy .env.example to .env and fill in PIXABAY_API_KEY etc.
     env_file:
       - .env
-    environment:
-      TZ: "${TZ:-Asia/Shanghai}"
-      CRON_EXPRESSION: "${CRON_EXPRESSION:-0 2 * * *}"
-      RUN_ON_START: "${RUN_ON_START:-false}"
-      PIXABAY_KEYWORDS: "${PIXABAY_KEYWORDS:-mountain,landscape,forest,lake,nature}"
-      PIXABAY_COUNT: "${PIXABAY_COUNT:-50}"
-      PIXABAY_SIZE: "${PIXABAY_SIZE:-original}"
-      PIXABAY_IMAGE_TYPE: "${PIXABAY_IMAGE_TYPE:-photo}"
-      PIXABAY_SAFE_SEARCH: "${PIXABAY_SAFE_SEARCH:-true}"
-      PIXABAY_WORKERS: "${PIXABAY_WORKERS:-4}"
-      PIXABAY_DELAY: "${PIXABAY_DELAY:-0.2}"
-      PIXABAY_TIMEOUT: "${PIXABAY_TIMEOUT:-60}"
 
     volumes:
       # Host image directory (configured via PIXABAY_HOST_IMAGES_DIR in .env)
