@@ -180,9 +180,11 @@ docker run -d --name pixabay-downloader --restart unless-stopped \
   -v /服务器/日志目录:/data/logs \
   s1065420329/pixabay-downloader:latest
 
-# 方式二：compose 方式（配置更清晰）—— 编辑 docker-compose.yml：
-#   删除 `build: .` 行，把 image 改为: s1065420329/pixabay-downloader:latest
-#   然后: docker compose up -d   （自动拉取镜像）
+# 方式二：compose 方式（配置更清晰）—— 下载拉取镜像专用的 compose 文件：
+curl -O https://raw.githubusercontent.com/yyliucha/pixabay-downloader/main/docker-compose.pull.yml
+mv docker-compose.pull.yml docker-compose.yml
+# 创建 .env（参照 .env.example），然后：
+docker compose up -d   # 自动拉取镜像并启动
 ```
 
 **镜像自动构建的一次性配置**（约 2 分钟）：

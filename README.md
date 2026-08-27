@@ -181,9 +181,11 @@ docker run -d --name pixabay-downloader --restart unless-stopped \
   -v /server/logs-dir:/data/logs \
   s1065420329/pixabay-downloader:latest
 
-# Option B: Compose (clearer config) - edit docker-compose.yml:
-#   remove the `build: .` line and set image: s1065420329/pixabay-downloader:latest
-#   then: docker compose up -d   (pulls the image automatically)
+# Option B: Compose (clearer config) - download the pull-mode compose file:
+curl -O https://raw.githubusercontent.com/yyliucha/pixabay-downloader/main/docker-compose.pull.yml
+mv docker-compose.pull.yml docker-compose.yml
+# create .env (see .env.example), then:
+docker compose up -d   # pulls the image automatically
 ```
 
 **One-time setup for automatic image builds** (~2 minutes):
