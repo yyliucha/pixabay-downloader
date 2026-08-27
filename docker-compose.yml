@@ -5,14 +5,14 @@ services:
     container_name: pixabay-downloader
     restart: unless-stopped
 
-    # 宿主配置文件: 复制 .env.example 为 .env, 填入 PIXABAY_API_KEY 等
+    # Host config file: copy .env.example to .env and fill in PIXABAY_API_KEY etc.
     env_file:
       - .env
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
       CRON_EXPRESSION: "${CRON_EXPRESSION:-0 2 * * *}"
       RUN_ON_START: "${RUN_ON_START:-false}"
-      PIXABAY_KEYWORDS: "${PIXABAY_KEYWORDS:-山,风景,森林,湖泊,自然}"
+      PIXABAY_KEYWORDS: "${PIXABAY_KEYWORDS:-mountain,landscape,forest,lake,nature}"
       PIXABAY_COUNT: "${PIXABAY_COUNT:-50}"
       PIXABAY_SIZE: "${PIXABAY_SIZE:-original}"
       PIXABAY_IMAGE_TYPE: "${PIXABAY_IMAGE_TYPE:-photo}"
@@ -22,11 +22,11 @@ services:
       PIXABAY_TIMEOUT: "${PIXABAY_TIMEOUT:-60}"
 
     volumes:
-      # 宿主机图片保存目录(通过 .env 的 PIXABAY_HOST_IMAGES_DIR 配置)
+      # Host image directory (configured via PIXABAY_HOST_IMAGES_DIR in .env)
       - "${PIXABAY_HOST_IMAGES_DIR:-./pixabay_images}:/data/images"
-      # 宿主机日志目录(通过 .env 的 PIXABAY_HOST_LOG_DIR 配置)
+      # Host log directory (configured via PIXABAY_HOST_LOG_DIR in .env)
       - "${PIXABAY_HOST_LOG_DIR:-./logs}:/data/logs"
-      # 可选: 挂载宿主配置文件 config.json 覆盖默认下载配置
+      # Optional: mount a host config.json to override download defaults
       - ./config.json:/app/config.json:ro
 
     logging:

@@ -1,11 +1,11 @@
-# 密钥
+# Secrets
 .env
 
-# 下载的图片
+# Downloaded images
 images/
 pixabay_images/
 
-# 定时任务生成的启动脚本(含本机 Python 路径)与日志
+# Scheduled-task runner script (contains local Python path) and logs
 scheduled_run.bat
 logs/
 
@@ -13,5 +13,5 @@ logs/
 __pycache__/
 *.pyc
 
-# 测试临时目录
+# Test temp files
 *.part

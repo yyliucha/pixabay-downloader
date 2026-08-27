@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Pixabay 图片下载器
-==================
-通过 Pixabay 官方 API 按关键词批量下载图片到本地。
+Pixabay Image Downloader
+========================
+Batch download images from Pixabay via the official API, organized by keyword.
 
-特性:
-  * 官方 API, 合规稳定, 无需模拟浏览器
-  * 多线程并发下载, 失败自动重试
-  * 断点续传 + 全局去重: 下载过的图片(按 Pixabay 图片 ID 记录在
-    <保存目录>/download_history.json)不会重复下载,
-    即使换关键词、换目录或文件被移动过
-  * 每个关键词目录下生成 metadata.csv 元数据清单
-    (图片 ID / 来源页 / 标签 / 作者 / 文件 / 状态)
+Features:
+  * Official API - stable and compliant, no browser automation
+  * Multithreaded downloads with automatic retries
+  * Global dedupe + resume: images already downloaded (recorded by Pixabay
+    image ID in <output_dir>/download_history.json) are never re-downloaded,
+    even if you change keywords, move the output folder, or move files
+  * Re-running automatically fetches the NEXT new images until all results
+    for a keyword are exhausted
+  * A metadata.csv manifest is generated in each keyword folder
+    (image ID / source page / tags / author / file / status)
 
-用法示例:
-    python pixabay_downloader.py                          # 按 config.json 配置下载
-    python pixabay_downloader.py --keywords "山,风景" --count 100
+Usage:
+    python pixabay_downloader.py                          # download per config.json
+    python pixabay_downloader.py --keywords "mountain,landscape" --count 100
     python pixabay_downloader.py --size large --output D:/pictures
-    python pixabay_downloader.py --dry-run                # 只搜索, 打印地址, 不下载
+    python pixabay_downloader.py --dry-run                # search only, print URLs
 
-配置优先级: 命令行参数 > 环境变量 PIXABAY_API_KEY / .env 文件 > config.json
-仅依赖 Python 标准库 (Python 3.8+), 无需安装任何第三方包。
+Config precedence: CLI arguments > env vars / .env file > config.json > defaults
+Pure Python standard library (Python 3.8+), no third-party dependencies.
 """
 
 import argparse
@@ -49,7 +51,7 @@ ENV_FILE = SCRIPT_DIR / ".env"
 HISTORY_FILE_NAME = "download_history.json"
 
 DEFAULT_CONFIG = {
-    "keywords": ["山", "风景", "森林", "湖泊", "自然"],
+    "keywords": ["mountain", "landscape", "forest", "lake", "nature"],
     "per_keyword": 50,
     "image_size": "original",
     "image_type": "photo",
@@ -61,7 +63,7 @@ DEFAULT_CONFIG = {
     "base_url": "https://pixabay.com/api/",
 }
 
-# 各尺寸档位对应的 API 响应字段（按优先级排列, 缺失时自动降级）
+# API response fields for each size tier (in priority order, auto-fallback if missing)
 SIZE_FIELDS = {
     "original": ("imageURL", "largeImageURL", "webformatURL", "previewURL"),
     "large": ("largeImageURL", "imageURL", "webformatURL", "previewURL"),
@@ -70,20 +72,20 @@ SIZE_FIELDS = {
 }
 
 HTTP_HINTS = {
-    400: "请求参数有误(可能是 base_url 或查询参数问题)",
-    401: "API key 无效, 请检查 .env 中的 PIXABAY_API_KEY 是否正确",
-    403: "无访问权限(账号问题或地区限制)",
-    404: "接口地址不存在(检查 base_url)",
-    429: "请求过于频繁被限流, 可增大 config.json 中的 api_delay_seconds",
+    400: "bad request (check base_url or query parameters)",
+    401: "invalid API key, check PIXABAY_API_KEY in .env",
+    403: "access denied (account issue or region restriction)",
+    404: "endpoint not found (check base_url)",
+    429: "rate limited, increase api_delay_seconds in config.json",
 }
 
 
 class ApiError(Exception):
-    """API 调用失败。"""
+    """Raised when the API call fails."""
 
 
 class _Tee:
-    """同时写入终端和日志文件(供 --log 使用)。"""
+    """Write to both the terminal and a log file (used by --log)."""
 
     def __init__(self, stream, file):
         self.stream = stream
@@ -99,7 +101,7 @@ class _Tee:
         self.file.flush()
 
 
-# ---------------------------------------------------------------- 配置与密钥
+# ---------------------------------------------------------------- config & key
 
 def load_config():
     cfg = dict(DEFAULT_CONFIG)
@@ -109,14 +111,14 @@ def load_config():
             if isinstance(user, dict):
                 cfg.update({k: v for k, v in user.items() if v is not None})
         except json.JSONDecodeError as e:
-            print(f"! 警告: {CONFIG_FILE.name} 不是合法的 JSON, 已忽略: {e}", file=sys.stderr)
+            print(f"! Warning: {CONFIG_FILE.name} is not valid JSON, ignored: {e}", file=sys.stderr)
     return cfg
 
 
-# 环境变量 → 配置项映射(Docker 部署用)
-# 优先级: 命令行参数 > 环境变量 > config.json > 默认值
+# Env var -> config mapping (for Docker / server deployment)
+# Precedence: CLI arguments > env vars > config.json > defaults
 ENV_CONFIG_MAP = {
-    "PIXABAY_KEYWORDS": ("keywords", lambda v: [k.strip() for k in re.split(r"[,，]", v) if k.strip()]),
+    "PIXABAY_KEYWORDS": ("keywords", lambda v: [k.strip() for k in v.split(",") if k.strip()]),
     "PIXABAY_COUNT": ("per_keyword", lambda v: max(1, int(v))),
     "PIXABAY_SIZE": ("image_size", str),
     "PIXABAY_IMAGE_TYPE": ("image_type", str),
@@ -130,7 +132,7 @@ ENV_CONFIG_MAP = {
 
 
 def apply_env_overrides(cfg):
-    """用环境变量覆盖配置(供 Docker / 服务器部署使用)。"""
+    """Override config with environment variables (for Docker / server deployment)."""
     for env_name, (key, conv) in ENV_CONFIG_MAP.items():
         raw = os.environ.get(env_name)
         if raw is None or raw.strip() == "":
@@ -138,9 +140,10 @@ def apply_env_overrides(cfg):
         try:
             cfg[key] = conv(raw.strip())
         except ValueError:
-            print(f"! 警告: 环境变量 {env_name}={raw} 无法解析, 已忽略", file=sys.stderr)
+            print(f"! Warning: env var {env_name}={raw} could not be parsed, ignored", file=sys.stderr)
     if cfg["image_size"] not in SIZE_FIELDS:
-        print(f"! 警告: image_size={cfg['image_size']} 无效, 已回退为 original", file=sys.stderr)
+        print(f"! Warning: image_size={cfg['image_size']} is invalid, falling back to original",
+              file=sys.stderr)
         cfg["image_size"] = "original"
     return cfg
 
@@ -168,10 +171,10 @@ def resolve_api_key(cli_key):
     return ""
 
 
-# ---------------------------------------------------------------- API 请求
+# ---------------------------------------------------------------- API requests
 
 def http_get_json(url, timeout, retries=3):
-    """GET 请求并解析 JSON, 带重试; 失败抛 ApiError。"""
+    """GET a URL and parse JSON, with retries; raises ApiError on failure."""
     last_err = None
     for attempt in range(1, retries + 1):
         try:
@@ -188,25 +191,27 @@ def http_get_json(url, timeout, retries=3):
                 pass
             msg = HTTP_HINTS.get(e.code, f"HTTP {e.code}")
             if re.search(r"API\s*key", body_text, re.IGNORECASE):
-                msg = HTTP_HINTS[401]  # 服务端明确提示 key 问题
+                msg = HTTP_HINTS[401]  # server explicitly reported a key problem
             if body_text:
-                msg = f"{msg}; 服务端信息: {body_text}"
+                msg = f"{msg}; server response: {body_text}"
             if e.code == 429 or e.code >= 500:
                 last_err = f"HTTP {e.code}"
                 time.sleep(2 ** attempt)
                 continue
-            raise ApiError(f"API 请求失败: {msg}") from e
+            raise ApiError(f"API request failed: {msg}") from e
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last_err = str(e)
             time.sleep(2 ** attempt)
-    raise ApiError(f"API 请求多次重试后仍然失败: {last_err}")
+    raise ApiError(f"API request failed after retries: {last_err}")
 
 
 def collect_hits(base_url, key, query, target, image_type, safe_search, delay, exclude_ids):
-    """分页搜索, 收集指定数量的【新】图片条目(按 id 去重, 并排除已下载过的 id)。
+    """Search with pagination, collecting NEW image entries only
+    (deduped by id, excluding already-downloaded ids).
 
-    返回 (新图片列表, 总匹配数, 已下载过的数量)。
-    再次运行时, 已下载的图片会被自动跳过, 继续翻页拿到后面的新图。
+    Returns (new hits, total matches, count of already-downloaded hits).
+    On re-runs, downloaded images are skipped and pagination continues
+    to fetch the next new images.
     """
     hits_new, seen = [], set()
     page = 1
@@ -225,7 +230,7 @@ def collect_hits(base_url, key, query, target, image_type, safe_search, delay, e
         url = base_url + "?" + urllib.parse.urlencode(params)
         data = http_get_json(url, timeout=30)
         if isinstance(data, dict) and data.get("status") == "error":
-            raise ApiError(f"API 返回错误: {data.get('message', data)}")
+            raise ApiError(f"API returned an error: {data.get('message', data)}")
         total_hits = data.get("totalHits", 0) if isinstance(data, dict) else 0
         hits = data.get("hits") or [] if isinstance(data, dict) else []
         if not hits:
@@ -246,10 +251,11 @@ def collect_hits(base_url, key, query, target, image_type, safe_search, delay, e
     return hits_new[:target], total_hits, already
 
 
-# ---------------------------------------------------------------- 图片下载
+# ---------------------------------------------------------------- image download
 
 def pick_image_url(hit, size):
-    """按尺寸档位挑选图片地址, 返回 (url, 所用字段名); 没有可用地址返回 (None, None)。"""
+    """Pick the image URL for the requested size tier; returns (url, field name),
+    or (None, None) if no usable URL exists."""
     fields = SIZE_FIELDS.get(size, SIZE_FIELDS["original"])
     for f in fields:
         v = hit.get(f)
@@ -267,7 +273,8 @@ def guess_ext(url, hit):
 
 
 def download_file(url, dest, timeout, retries=3):
-    """流式下载到 dest(先写 .part 临时文件, 完成后原子改名), 失败自动重试。"""
+    """Stream download to dest (writes a .part temp file, atomically renames on
+    completion), with automatic retries on failure."""
     last_err = None
     for attempt in range(1, retries + 1):
         try:
@@ -290,11 +297,11 @@ def download_file(url, dest, timeout, retries=3):
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last_err = str(e)
             time.sleep(2 ** attempt)
-    raise RuntimeError(f"多次重试失败: {last_err}")
+    raise RuntimeError(f"failed after retries: {last_err}")
 
 
 def download_one(hit, folder, size, timeout, ids_done):
-    """下载单张图片。返回结果字典, 绝不抛异常。"""
+    """Download a single image. Returns a result dict; never raises."""
     hid = hit.get("id")
     url, field = pick_image_url(hit, size)
     base = {
@@ -307,7 +314,7 @@ def download_one(hit, folder, size, timeout, ids_done):
     }
     if not url:
         return {**base, "status": "failed", "file": "", "source_url": "",
-                "reason": "", "error": "响应中没有可用图片地址"}
+                "reason": "", "error": "no usable image URL in the response"}
     ext = guess_ext(url, hit)
     dest = folder / f"{hid}{ext}"
     entry = {"file": dest.name, "source_url": url}
@@ -323,7 +330,7 @@ def download_one(hit, folder, size, timeout, ids_done):
         return {**base, "status": "failed", "reason": "", **entry, "error": str(e)}
 
 
-# ---------------------------------------------------------------- 下载历史(全局去重)
+# ---------------------------------------------------------------- download history (global dedupe)
 
 def load_history(output_dir):
     p = Path(output_dir) / HISTORY_FILE_NAME
@@ -344,7 +351,7 @@ def save_history(output_dir, history):
     os.replace(tmp, p)
 
 
-# ---------------------------------------------------------------- 关键词处理
+# ---------------------------------------------------------------- keyword handling
 
 def sanitize_dirname(name):
     s = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip().rstrip(". ")
@@ -374,20 +381,19 @@ def run_keyword(kw, cfg, key, history, dry_run, quiet):
             exclude_ids,
         )
     except ApiError as e:
-        print(f"[{kw}] 搜索失败: {e}", file=sys.stderr)
+        print(f"[{kw}] search failed: {e}", file=sys.stderr)
         return {"keyword": kw, "ok": 0, "skipped": 0, "failed": 0, "error": str(e)}
 
     if not hits:
         if total > 0:
-            print(f"[{kw}] 共匹配 {total} 张, 其中 {already} 张已下载过, "
-                  "没有新的图片可下载(如需重新下载, 请删除 download_history.json 后重跑)。")
+            print(f"[{kw}] Found {total} result(s), {already} already downloaded - "
+                  "no new images to download (delete download_history.json to re-download).")
         else:
-            print(f"[{kw}] 没有找到结果 (totalHits=0)。"
-                  "提示: 中文关键词结果可能较少, 可尝试英文关键词, 如 mountain / landscape / forest。")
+            print(f"[{kw}] No results found (totalHits=0). Try different keywords.")
         return {"keyword": kw, "ok": 0, "skipped": 0, "failed": 0, "error": ""}
 
-    print(f"[{kw}] 共匹配 {total} 张, 其中 {already} 张已下载过, "
-          f"本次将下载 {len(hits)} 张新图")
+    print(f"[{kw}] Found {total} result(s), {already} already downloaded, "
+          f"will download {len(hits)} new")
 
     if dry_run:
         for h in hits:
@@ -422,49 +428,49 @@ def run_keyword(kw, cfg, key, history, dry_run, quiet):
 
             if not quiet:
                 mark = {"ok": "✔", "skipped": "⏭", "failed": "✖"}[r["status"]]
-                why = {"history": " (已下载过, 跳过)", "exists": " (文件已存在, 跳过)"}.get(
-                    r["reason"], " (失败: " + r["error"] + ")" if r["error"] else "")
+                why = {"history": " (already downloaded)", "exists": " (file exists)"}.get(
+                    r["reason"], " (failed: " + r["error"] + ")" if r["error"] else "")
                 print(f"  {mark} {r['file'] or r['id']}{why}")
 
     write_metadata(folder, kw, rows)
     save_history(cfg["output_dir"], history)
-    print(f"[{kw}] 完成: 新增 {counters['ok']} 张 | 跳过 {counters['skipped']} 张 | "
-          f"失败 {counters['failed']} 张 → {folder}")
+    print(f"[{kw}] Done: {counters['ok']} new | {counters['skipped']} skipped | "
+          f"{counters['failed']} failed -> {folder}")
     return {"keyword": kw, **counters, "error": ""}
 
 
-# ---------------------------------------------------------------- 入口
+# ---------------------------------------------------------------- entry point
 
 def parse_args(argv):
     p = argparse.ArgumentParser(
         prog="pixabay_downloader",
-        description="Pixabay 官方 API 图片下载器(仅标准库, 无需安装依赖)",
+        description="Pixabay image downloader via the official API (stdlib only, no dependencies)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "示例:\n"
+            "Examples:\n"
             "  python pixabay_downloader.py\n"
-            "  python pixabay_downloader.py --keywords \"山,风景\" --count 100\n"
+            "  python pixabay_downloader.py --keywords \"mountain,landscape\" --count 100\n"
             "  python pixabay_downloader.py --size large --output D:/pictures\n"
             "  python pixabay_downloader.py --dry-run\n"
         ),
     )
-    p.add_argument("--keywords", help="要搜索的关键词, 逗号分隔 (覆盖 config.json)")
+    p.add_argument("--keywords", help="comma-separated search keywords (overrides config.json)")
     p.add_argument("--count", type=int,
-                   help="每个关键词下载的新图片数量 (覆盖 config.json 的 per_keyword); "
-                        "再次运行时自动跳过已下载的, 继续下载后面的新图")
+                   help="new images to download per keyword (overrides config.json per_keyword); "
+                        "on re-runs already-downloaded images are skipped and later new ones are fetched")
     p.add_argument("--size", choices=list(SIZE_FIELDS),
-                   help="图片尺寸: original=原图(默认) | large=大图(约1280px) | "
-                        "webformat=中等(640px) | preview=缩略图(150px)")
-    p.add_argument("--output", help="保存目录 (覆盖 config.json 的 output_dir)")
-    p.add_argument("--key", help="Pixabay API key (也可填在 .env 或环境变量 PIXABAY_API_KEY)")
-    p.add_argument("--base-url", help="API 地址 (一般无需修改, 主要用于本地测试)")
-    p.add_argument("--workers", type=int, help="并发下载线程数")
+                   help="image size: original=original (default) | large=~1280px | "
+                        "webformat=640px | preview=150px thumbnail")
+    p.add_argument("--output", help="save directory (overrides config.json output_dir)")
+    p.add_argument("--key", help="Pixabay API key (or set in .env / env var PIXABAY_API_KEY)")
+    p.add_argument("--base-url", help="API base URL (usually not needed, mainly for testing)")
+    p.add_argument("--workers", type=int, help="number of concurrent download threads")
     p.add_argument("--image-type", choices=["all", "photo", "illustration", "vector"],
-                   help="图片类型: photo=照片(默认) | illustration=插画 | vector=矢量图 | all=全部")
-    p.add_argument("--dry-run", action="store_true", help="只搜索并打印图片地址, 不下载")
-    p.add_argument("--quiet", action="store_true", help="不打印每张图片的进度行")
+                   help="image type: photo=photos (default) | illustration | vector | all")
+    p.add_argument("--dry-run", action="store_true", help="search only, print image URLs, no download")
+    p.add_argument("--quiet", action="store_true", help="do not print per-image progress lines")
     p.add_argument("--log", metavar="FILE",
-                   help="把运行输出同时追加写入日志文件(定时任务建议使用)")
+                   help="also append run output to a log file (recommended for scheduled runs)")
     return p.parse_args(argv)
 
 
@@ -480,7 +486,7 @@ def main(argv=None):
     apply_env_overrides(cfg)
 
     if args.keywords is not None:
-        cfg["keywords"] = [k.strip() for k in re.split(r"[,，]", args.keywords) if k.strip()]
+        cfg["keywords"] = [k.strip() for k in args.keywords.split(",") if k.strip()]
     if args.count:
         cfg["per_keyword"] = max(1, args.count)
     if args.size:
@@ -501,29 +507,30 @@ def main(argv=None):
         log_file = open(log_path, "a", encoding="utf-8")
         sys.stdout = _Tee(sys.stdout, log_file)
         sys.stderr = _Tee(sys.stderr, log_file)
-        print(f"========== 开始运行: {datetime.datetime.now():%Y-%m-%d %H:%M:%S} "
-              f"(关键词: {cfg['keywords']}, 每关键词 {cfg['per_keyword']} 张) ==========")
+        print(f"========== Run started: {datetime.datetime.now():%Y-%m-%d %H:%M:%S} "
+              f"(keywords: {cfg['keywords']}, {cfg['per_keyword']} per keyword) ==========")
 
     key = resolve_api_key(args.key)
     if not key:
-        print("错误: 未设置 Pixabay API key。", file=sys.stderr)
-        print("  1) 免费注册账号: https://pixabay.com/accounts/register/", file=sys.stderr)
-        print("  2) 登录后在 https://pixabay.com/api/docs/ 页面复制你的 key", file=sys.stderr)
-        print("  3) 复制 .env.example 为 .env 并填入 key, 或设置环境变量 PIXABAY_API_KEY", file=sys.stderr)
+        print("Error: Pixabay API key is not set.", file=sys.stderr)
+        print("  1) Register a free account: https://pixabay.com/accounts/register/", file=sys.stderr)
+        print("  2) Copy your key from https://pixabay.com/api/docs/", file=sys.stderr)
+        print("  3) Copy .env.example to .env and fill in the key, "
+              "or set the PIXABAY_API_KEY environment variable", file=sys.stderr)
         return 2
     if not re.match(r"^\d{5,8}-[0-9a-f]{16,32}$", key):
-        print(f"! 警告: key 的格式看起来不太对(通常是 7位数字-32位十六进制): {key[:12]}...",
+        print(f"! Warning: key format looks unusual (usually 7 digits + dash + 32 hex): {key[:12]}...",
               file=sys.stderr)
 
     out = Path(cfg["output_dir"]).resolve()
-    print(f"保存目录: {out}")
-    print(f"去重记录: {out / HISTORY_FILE_NAME} (已下载的图片不会重复下载)")
+    print(f"Save directory: {out}")
+    print(f"Dedupe record: {out / HISTORY_FILE_NAME} (downloaded images are never re-downloaded)")
     if not args.dry_run:
         out.mkdir(parents=True, exist_ok=True)
 
     history = load_history(cfg["output_dir"]) if not args.dry_run else {"ids": {}}
     if history["ids"]:
-        print(f"已下载过 {len(history['ids'])} 张图片, 运行中会自动跳过")
+        print(f"{len(history['ids'])} image(s) already downloaded, they will be skipped")
 
     results = []
     for kw in cfg["keywords"]:
@@ -539,9 +546,9 @@ def main(argv=None):
         print("=" * 40)
         for r in results:
             tag = f"  ({r['error']})" if r.get("error") else ""
-            print(f"  {r['keyword']}: 新增 {r['ok']} | 跳过 {r['skipped']} | 失败 {r['failed']}{tag}")
-        print(f"总计: 新增 {ok} 张, 跳过 {sk} 张, 失败 {fl} 张")
-        print(f"保存位置: {out}")
+            print(f"  {r['keyword']}: {r['ok']} new | {r['skipped']} skipped | {r['failed']} failed{tag}")
+        print(f"Total: {ok} new, {sk} skipped, {fl} failed")
+        print(f"Saved to: {out}")
     return 1 if failed_any else 0
 
 

@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-端到端测试: 用本地模拟服务器模拟 Pixabay API, 验证下载器的完整流程。
+End-to-end test: a local mock server emulates the Pixabay API to verify the
+downloader's full workflow.
 
-覆盖场景:
-  1. 首次下载: 前 4 张全部下载成功 (其中 1 张缺少 imageURL 字段,
-     验证自动降级到 largeImageURL)
-  2. 再次运行 → 下载后面的图片: 自动翻页跳过已下载的 4 张,
-     继续下载后续 2 张新图 (验证"不重复下载 + 下载新图")
-  3. 全部下完后重跑: 提示"没有新的图片可下载", 不重复下载任何一张
-  4. dry-run: 只打印地址, 不创建任何文件
+Scenarios:
+  1. First run: the first 4 images download successfully (one lacks the
+     imageURL field, verifying the automatic fallback to largeImageURL)
+  2. Re-run -> fetch later images: automatically skips the 4 already
+     downloaded and downloads the next 2 new images (dedupe + new images)
+  3. Re-run after everything is downloaded: reports "no new images",
+     nothing is re-downloaded
+  4. dry-run: only prints URLs, creates no files
+  5. Environment-variable configuration (equivalent to Docker deployment)
 
-运行方式(无需网络、无需 API key):
+Run (no network, no API key needed):
     python tests/e2e_test.py
 """
 
@@ -28,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOWNLOADER = os.path.join(ROOT, "pixabay_downloader.py")
 
-# 1x1 像素的合法 JPEG / PNG (仅用于验证文件确实被写入)
+# Valid 1x1 JPEG / PNG (just to verify files are really written)
 JPEG_BYTES = base64.b64decode(
     "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwg"
     "JC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAA"
@@ -41,10 +44,10 @@ PNG_BYTES = base64.b64decode(
 
 PORT = {"v": 0}
 
-# (id, 扩展名, 是否提供 imageURL 原图字段)
+# (id, extension, whether the imageURL original field is provided)
 IMAGE_SPECS = [
     (1001, "jpg", True),
-    (1002, "png", False),  # 故意缺 imageURL, 测试降级到 largeImageURL
+    (1002, "png", False),  # deliberately missing imageURL, tests fallback to largeImageURL
     (1003, "jpg", True),
     (1004, "jpg", True),
     (1005, "jpg", True),
@@ -60,7 +63,7 @@ def make_hits(start, end):
             "id": hid,
             "pageURL": f"https://pixabay.com/photos/demo-{hid}/",
             "type": "photo",
-            "tags": "mock test 测试",
+            "tags": "mock test",
             "previewURL": img_url,
             "webformatURL": img_url,
             "largeImageURL": img_url,
@@ -113,7 +116,8 @@ _LOG_COUNTER = {"n": 0}
 
 
 def run_cli(extra_args, out_dir, logs_dir, env=None):
-    """运行下载器 CLI, 输出重定向到日志文件后读回 (兼容无管道环境)。"""
+    """Run the downloader CLI; capture output via log files (pipe-free, works
+    in restricted environments)."""
     _LOG_COUNTER["n"] += 1
     log_stdout = os.path.join(logs_dir, f"stdout_{_LOG_COUNTER['n']}.log")
     log_stderr = os.path.join(logs_dir, f"stderr_{_LOG_COUNTER['n']}.log")
@@ -144,73 +148,75 @@ def main():
         with tempfile.TemporaryDirectory(prefix="pixabay_test_") as tmp:
             out = os.path.join(tmp, "images")
 
-            # ---- 场景 1: 首次下载 4 张 (同时验证 --log 日志写入)
+            # ---- Scenario 1: first run downloads 4 (also verifies --log) ----
             log_file = os.path.join(tmp, "run.log")
-            r = run_cli(["--keywords", "山", "--count", "4", "--workers", "3",
+            r = run_cli(["--keywords", "mountain", "--count", "4", "--workers", "3",
                          "--log", log_file], out, tmp)
             print(r["stdout"])
             if r["returncode"] != 0:
                 print("STDERR:", r["stderr"])
-                raise SystemExit("场景1失败: 首次下载返回码非0")
-            assert "新增 4 张" in r["stdout"], "首次应新增 4 张"
-            assert "失败 0 张" in r["stdout"], "不应有失败"
+                raise SystemExit("Scenario 1 failed: non-zero return code on first run")
+            assert "4 new" in r["stdout"], f"first run should add 4 new: {r['stdout']}"
+            assert "0 failed" in r["stdout"], "there should be no failures"
             log_text = open(log_file, encoding="utf-8").read()
-            assert "开始运行" in log_text, f"日志缺少开始标记: {log_text}"
-            assert "新增 4 张" in log_text, f"日志缺少完成统计: {log_text}"
+            assert "Run started" in log_text, f"log missing start banner: {log_text}"
+            assert "4 new" in log_text, f"log missing completion stats: {log_text}"
 
-            mountain_dir = os.path.join(out, "山")
+            mountain_dir = os.path.join(out, "mountain")
             assert sorted(os.listdir(mountain_dir)) == \
                 ["1001.jpg", "1002.png", "1003.jpg", "1004.jpg", "metadata.csv"], \
-                f"山 目录文件列表不符: {sorted(os.listdir(mountain_dir))}"
+                f"mountain folder file list mismatch: {sorted(os.listdir(mountain_dir))}"
             for f in ["1001.jpg", "1002.png", "1003.jpg", "1004.jpg"]:
                 p = os.path.join(mountain_dir, f)
-                assert os.path.getsize(p) > 0, f"{f} 为空文件"
+                assert os.path.getsize(p) > 0, f"{f} is empty"
 
-            # ---- 场景 2: 再次运行 → 下载后面的图片 (跳过已下载的 4 张, 继续拿新 2 张)
-            r2 = run_cli(["--keywords", "山", "--count", "4"], out, tmp)
+            # ---- Scenario 2: re-run fetches the NEXT images (skips 4, adds 2) ----
+            r2 = run_cli(["--keywords", "mountain", "--count", "4"], out, tmp)
             assert r2["returncode"] == 0, r2["stderr"]
-            assert "其中 4 张已下载过" in r2["stdout"], f"应识别出已下载过的4张: {r2['stdout']}"
-            assert "本次将下载 2 张新图" in r2["stdout"], f"应下载后续2张新图: {r2['stdout']}"
-            assert "新增 2 张" in r2["stdout"], f"应新增 2 张: {r2['stdout']}"
+            assert "4 already downloaded" in r2["stdout"], \
+                f"should detect 4 already downloaded: {r2['stdout']}"
+            assert "will download 2 new" in r2["stdout"], \
+                f"should download the next 2 new: {r2['stdout']}"
+            assert "2 new" in r2["stdout"], f"should add 2 new: {r2['stdout']}"
             assert sorted(os.listdir(mountain_dir)) == \
                 ["1001.jpg", "1002.png", "1003.jpg", "1004.jpg",
                  "1005.jpg", "1006.png", "metadata.csv"], \
-                f"再次运行后文件列表不符: {sorted(os.listdir(mountain_dir))}"
+                f"file list mismatch after re-run: {sorted(os.listdir(mountain_dir))}"
 
             hist = json.loads(open(os.path.join(out, "download_history.json"), encoding="utf-8").read())
             assert sorted(hist["ids"]) == ["1001", "1002", "1003", "1004", "1005", "1006"], \
-                f"去重记录不符: {sorted(hist['ids'])}"
+                f"dedupe record mismatch: {sorted(hist['ids'])}"
 
-            # ---- 场景 3: 全部下完后重跑 → 不重复下载, 提示没有新图
-            r3 = run_cli(["--keywords", "山", "--count", "4"], out, tmp)
+            # ---- Scenario 3: re-run after everything is downloaded -> no new images ----
+            r3 = run_cli(["--keywords", "mountain", "--count", "4"], out, tmp)
             assert r3["returncode"] == 0
-            assert "没有新的图片可下载" in r3["stdout"], f"应提示没有新图: {r3['stdout']}"
-            assert "新增 0 张" in r3["stdout"]
-            # 文件数量不变, 一张都没重复下载
+            assert "no new images" in r3["stdout"], f"should report no new images: {r3['stdout']}"
+            assert "0 new" in r3["stdout"]
+            # File list unchanged: nothing was re-downloaded
             assert sorted(os.listdir(mountain_dir)) == \
                 ["1001.jpg", "1002.png", "1003.jpg", "1004.jpg",
                  "1005.jpg", "1006.png", "metadata.csv"], \
-                f"重跑后文件不应变化: {sorted(os.listdir(mountain_dir))}"
+                f"files should not change after re-run: {sorted(os.listdir(mountain_dir))}"
 
-            # ---- 场景 4: dry-run 不创建任何文件
+            # ---- Scenario 4: dry-run creates no files ----
             out2 = os.path.join(tmp, "dry")
-            r4 = run_cli(["--keywords", "山", "--count", "4", "--dry-run"], out2, tmp)
+            r4 = run_cli(["--keywords", "mountain", "--count", "4", "--dry-run"], out2, tmp)
             assert r4["returncode"] == 0
             assert "(dry-run)" in r4["stdout"]
-            assert not os.path.exists(out2), "dry-run 不应创建目录"
+            assert not os.path.exists(out2), "dry-run must not create the output directory"
 
-            # ---- 场景 5: 环境变量配置(等价于 Docker 部署方式)
+            # ---- Scenario 5: environment-variable config (Docker-style) ----
             out_env = os.path.join(tmp, "env_images")
             r5 = run_cli([], out_env, tmp, env={
-                "PIXABAY_KEYWORDS": "山",
+                "PIXABAY_KEYWORDS": "mountain",
                 "PIXABAY_COUNT": "2",
                 "PIXABAY_SIZE": "original",
             })
             assert r5["returncode"] == 0, r5["stderr"]
-            assert "新增 2 张" in r5["stdout"], f"环境变量配置应下载2张: {r5['stdout']}"
-            assert sorted(os.listdir(os.path.join(out_env, "山"))) == \
+            assert "2 new" in r5["stdout"], f"env config should download 2: {r5['stdout']}"
+            assert sorted(os.listdir(os.path.join(out_env, "mountain"))) == \
                 ["1001.jpg", "1002.png", "metadata.csv"], \
-                f"环境变量配置下载文件不符: {sorted(os.listdir(os.path.join(out_env, '山')))}"
+                f"env config files mismatch: {sorted(os.listdir(os.path.join(out_env, 'mountain')))}"
 
             print("\nALL TESTS PASSED ✔")
     finally:

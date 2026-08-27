@@ -1,15 +1,15 @@
-# 密钥与本地配置
+# Secrets and local config
 .env
 
-# 下载的图片与日志(由宿主机目录挂载)
+# Downloaded images and logs (mounted from the host)
 images/
 pixabay_images/
 logs/
 
-# 定时任务生成的启动脚本
+# Runner script generated for scheduled tasks
 scheduled_run.bat
 
-# 测试与开发文件(不需要进镜像)
+# Test and dev files (not needed in the image)
 .git
 .gitignore
 tests/

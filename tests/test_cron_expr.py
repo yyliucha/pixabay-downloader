@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-setup_schedule.py 的 cron 逻辑单元测试(跨平台, 任何系统均可运行)。
+Unit tests for the cron logic in setup_schedule.py
+(cross-platform, runs on any OS).
 
-运行: python tests/test_cron_expr.py
+Run: python tests/test_cron_expr.py
 """
 
 import os
@@ -16,11 +17,11 @@ import setup_schedule as s
 
 
 def test_to_cron_expr():
-    assert s.to_cron_expr(daily="02:00") == "0 2 * * *", "每天02:00"
-    assert s.to_cron_expr(daily="13:05") == "5 13 * * *", "每天13:05"
-    assert s.to_cron_expr(hourly=6) == "0 */6 * * *", "每6小时"
-    assert s.to_cron_expr(weekly=("10:00", "SUN")) == "0 10 * * 0", "每周日10:00"
-    assert s.to_cron_expr(weekly=("10:00", "MON")) == "0 10 * * 1", "每周一10:00"
+    assert s.to_cron_expr(daily="02:00") == "0 2 * * *", "daily 02:00"
+    assert s.to_cron_expr(daily="13:05") == "5 13 * * *", "daily 13:05"
+    assert s.to_cron_expr(hourly=6) == "0 */6 * * *", "every 6 hours"
+    assert s.to_cron_expr(weekly=("10:00", "SUN")) == "0 10 * * 0", "every Sunday 10:00"
+    assert s.to_cron_expr(weekly=("10:00", "MON")) == "0 10 * * 1", "every Monday 10:00"
     print("✔ to_cron_expr")
 
 
@@ -29,18 +30,18 @@ def test_valid_cron():
     assert s.valid_cron("*/15 8-18 * * 1-5")
     assert s.valid_cron("30 2,14 * * 0,6")
     assert s.valid_cron("0 */2 * * *")
-    assert not s.valid_cron("0 2 * *")           # 只有4个字段
-    assert not s.valid_cron("a b c d e")         # 非法字符
-    assert not s.valid_cron("0 25 * * *")        # 小时越界(轻量校验)
+    assert not s.valid_cron("0 2 * *")           # only 4 fields
+    assert not s.valid_cron("a b c d e")         # illegal characters
+    assert not s.valid_cron("0 25 * * *")        # hour out of range
     print("✔ valid_cron")
 
 
 def test_describe_cron():
-    assert s.describe_cron("0 2 * * *") == "每天 02:00"
-    assert s.describe_cron("0 */6 * * *") == "每 6 小时"
-    assert s.describe_cron("0 10 * * 0") == "每周周日 10:00"
-    assert s.describe_cron("30 6 * * 1") == "每周周一 06:30"
-    assert s.describe_cron("0 * * * *") == "每小时"
+    assert s.describe_cron("0 2 * * *") == "Every day at 02:00"
+    assert s.describe_cron("0 */6 * * *") == "Every 6 hours"
+    assert s.describe_cron("0 10 * * 0") == "Every Sunday at 10:00"
+    assert s.describe_cron("30 6 * * 1") == "Every Monday at 06:30"
+    assert s.describe_cron("0 * * * *") == "Every hour"
     print("✔ describe_cron")
 
 
@@ -50,18 +51,20 @@ def test_crontab_block_roundtrip():
     assert "0 2 * * * /usr/bin/python3 /app/pixabay_downloader.py" in block
     assert "# <<< PixabayDownloader end" in block
 
-    # 有其它用户条目的 crontab, 插入块后再移除, 其它条目必须原样保留
-    text = "# 用户自己的注释\n0 5 * * * /usr/bin/backup\n" + block + "# 结尾\n1 6 * * * /usr/bin/cleanup\n"
+    # A crontab with other user entries: after inserting and removing the block,
+    # all other entries must be preserved verbatim
+    text = ("# user's own comment\n0 5 * * * /usr/bin/backup\n" + block +
+            "# trailing\n1 6 * * * /usr/bin/cleanup\n")
     cleaned = s.remove_old_block(text)
     assert "PixabayDownloader" not in cleaned
     assert "0 5 * * * /usr/bin/backup" in cleaned
     assert "1 6 * * * /usr/bin/cleanup" in cleaned
-    assert "# 用户自己的注释" in cleaned and "# 结尾" in cleaned
+    assert "# user's own comment" in cleaned and "# trailing" in cleaned
 
-    # 重复注册: 先移除旧块再插入新块, 不产生重复
+    # Re-registering: remove the old block then insert a new one, no duplicates
     reinstall = s.remove_old_block(text).rstrip("\n") + "\n" + block
     assert reinstall.count("# >>> PixabayDownloader start") == 1
-    print("✔ crontab 标记块往返")
+    print("✔ crontab marker block roundtrip")
 
 
 def test_build_cron_command():
@@ -71,7 +74,7 @@ def test_build_cron_command():
     assert "--log" in cmd
     assert ">>" in cmd and "2>&1" in cmd
     assert "cron_stdout.log" in cmd
-    print("✔ cron 命令构建")
+    print("✔ cron command building")
 
 
 def main():
